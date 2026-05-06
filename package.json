@@ -1,0 +1,131 @@
+{
+  "name": "mdm-vscode",
+  "displayName": "MDM",
+  "description": "VS Code extension for the MDM CLI tool — browse Skills, Agents, and Rules from the sidebar.",
+  "version": "0.1.0",
+  "publisher": "sethcarney",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sethcarney/mdm-vscode.git"
+  },
+  "bugs": {
+    "url": "https://github.com/sethcarney/mdm-vscode/issues"
+  },
+  "homepage": "https://github.com/sethcarney/mdm-vscode#readme",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Other"],
+  "keywords": ["mdm", "cli", "skills", "agents", "rules", "management"],
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "contributes": {
+    "configuration": {
+      "title": "MDM",
+      "properties": {
+        "mdm.cliPath": {
+          "type": "string",
+          "default": "mdm",
+          "markdownDescription": "Path to the `mdm` CLI executable. Defaults to `\"mdm\"`, which assumes the binary is in your `PATH`."
+        }
+      }
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "mdm-explorer",
+          "title": "MDM",
+          "icon": "resources/mdm-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "mdm-explorer": [
+        {
+          "id": "mdmSkills",
+          "name": "Skills",
+          "contextualTitle": "MDM Skills"
+        },
+        {
+          "id": "mdmAgents",
+          "name": "Agents",
+          "contextualTitle": "MDM Agents"
+        },
+        {
+          "id": "mdmRules",
+          "name": "Rules",
+          "contextualTitle": "MDM Rules"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "mdm.refreshSkills",
+        "title": "Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "mdm.refreshAgents",
+        "title": "Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "mdm.refreshRules",
+        "title": "Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "mdm.refreshAll",
+        "title": "MDM: Refresh All Views",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "mdm.copyName",
+        "title": "Copy Name"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "mdm.refreshSkills",
+          "when": "view == mdmSkills",
+          "group": "navigation"
+        },
+        {
+          "command": "mdm.refreshAgents",
+          "when": "view == mdmAgents",
+          "group": "navigation"
+        },
+        {
+          "command": "mdm.refreshRules",
+          "when": "view == mdmRules",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "mdm.copyName",
+          "when": "viewItem == mdm-item",
+          "group": "inline"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "lint": "eslint src --ext .ts",
+    "package": "npx @vscode/vsce package --no-dependencies"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "@vscode/vsce": "^2.26.0",
+    "eslint": "^8.57.0",
+    "typescript": "^5.4.0"
+  }
+}

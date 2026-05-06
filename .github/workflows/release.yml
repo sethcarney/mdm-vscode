@@ -1,0 +1,72 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+
+permissions:
+  contents: write      # Create GitHub release
+  id-token: write      # GitHub artifact attestation
+  attestations: write  # GitHub artifact attestation
+
+jobs:
+  release:
+    name: Package and publish release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@60edb5dd545a775178f52524783378180af0d1f8 # v4.0.2
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Compile
+        run: npm run compile
+
+      - name: Package extension
+        run: npm run package
+
+      - name: Extract version
+        id: version
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Generate build provenance attestation
+        uses: actions/attest-build-provenance@897ed5eab6ed058a474202017ada7f40bfa52940 # v1.3.2
+        with:
+          subject-path: '*.vsix'
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@9d7c94cfd0a1f3ed45544c887983e9fa900f0564 # v2.0.4
+        with:
+          name: MDM VS Code Extension v${{ steps.version.outputs.VERSION }}
+          files: '*.vsix'
+          generate_release_notes: true
+          body: |
+            ## Installation
+
+            Download the `.vsix` file and install it with:
+
+            ```sh
+            code --install-extension mdm-vscode-${{ steps.version.outputs.VERSION }}.vsix
+            ```
+
+            Or via VS Code: **Extensions → ⋯ → Install from VSIX…**
+
+            ## Requires
+
+            The [MDM CLI](https://github.com/sethcarney/mdm) must be installed and available in your `PATH`.
+
+      # Optional: publish to VS Code Marketplace when VSCE_PAT secret is set.
+      - name: Publish to VS Code Marketplace
+        if: ${{ secrets.VSCE_PAT != '' }}
+        run: npx @vscode/vsce publish --pat "$VSCE_PAT" --no-dependencies
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}

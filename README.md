@@ -45,11 +45,13 @@ Both **JSON** and **plain-text** output are supported. JSON items may contain `n
 
 ## Development
 
+Requires [Bun](https://bun.sh) ≥ 1.x.
+
 ```sh
 git clone https://github.com/sethcarney/mdm-vscode.git
 cd mdm-vscode
-npm install
-npm run compile
+bun install
+bun run compile
 ```
 
 Press `F5` in VS Code to open the Extension Development Host with the extension loaded.
@@ -58,10 +60,10 @@ Press `F5` in VS Code to open the Extension Development Host with the extension 
 
 | Command | Description |
 |---------|-------------|
-| `npm run compile` | Compile TypeScript to `out/` |
-| `npm run watch` | Watch mode |
-| `npm run lint` | Run ESLint |
-| `npm run package` | Package as `.vsix` |
+| `bun run compile` | Compile TypeScript to `out/` |
+| `bun run watch` | Watch mode |
+| `bun run lint` | Run ESLint |
+| `bun run package` | Package as `.vsix` |
 
 ### Releasing
 

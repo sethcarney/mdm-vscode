@@ -3,7 +3,7 @@
   "displayName": "MDM",
   "description": "VS Code extension for the MDM CLI tool — browse Skills and Agents from the sidebar.",
   "version": "0.1.0",
-  "publisher": "sethcarney",
+  "publisher": "SethsSoftware",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",

@@ -16,7 +16,8 @@
   "engines": {
     "vscode": "^1.85.0"
   },
-  "categories": ["Other"],
+  "icon": "resources/mdm.png",
+  "categories": ["AI", "Other"],
   "keywords": ["mdm", "cli", "skills", "agents", "management"],
   "activationEvents": [],
   "main": "./out/extension.js",

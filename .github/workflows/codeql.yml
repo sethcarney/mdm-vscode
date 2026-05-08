@@ -6,35 +6,39 @@ on:
   pull_request:
     branches: [main]
   schedule:
-    # Run every Monday at 08:00 UTC.
-    - cron: '0 8 * * 1'
+    - cron: '30 1 * * 6'
 
 permissions:
   contents: read
 
 jobs:
   analyze:
-    name: Analyze (javascript-typescript)
+    name: Analyze
     runs-on: ubuntu-latest
     permissions:
-      security-events: write
       actions: read
       contents: read
+      security-events: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [javascript-typescript]
 
     steps:
       - name: Checkout
-        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@1b1aada464948af03b950897e5eb522f92603cc2 # v3.24.9
+        uses: github/codeql-action/init@0daab03d71ff584ef619d027a3fd9146679c5d84 # v3
         with:
-          languages: javascript-typescript
-          queries: security-and-quality
+          languages: ${{ matrix.language }}
+          queries: security-extended
 
       - name: Autobuild
-        uses: github/codeql-action/autobuild@1b1aada464948af03b950897e5eb522f92603cc2 # v3.24.9
+        uses: github/codeql-action/autobuild@0daab03d71ff584ef619d027a3fd9146679c5d84 # v3
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@1b1aada464948af03b950897e5eb522f92603cc2 # v3.24.9
+        uses: github/codeql-action/analyze@0daab03d71ff584ef619d027a3fd9146679c5d84 # v3
         with:
-          category: /language:javascript-typescript
+          category: /language:${{ matrix.language }}

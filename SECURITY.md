@@ -2,20 +2,30 @@
 
 ## Supported Versions
 
-| Version | Supported |
-|---------|-----------|
-| 0.x.x   | ✅        |
+| Version | Supported          |
+| ------- | ------------------ |
+| 0.x.x   | :white_check_mark: |
 
 ## Reporting a Vulnerability
 
-**Do not open a public GitHub issue for security vulnerabilities.**
+We take security vulnerabilities seriously. Please follow responsible disclosure practices and **do not report security issues through public GitHub issues**.
 
-Please report them using [GitHub Security Advisories](https://github.com/sethcarney/mdm-vscode/security/advisories/new).
+### How to Report
 
-We aim to:
-- Acknowledge the report within **48 hours**
-- Provide a remediation timeline within **7 days**
-- Release a patch within **30 days** for confirmed vulnerabilities
+Use [GitHub Security Advisories](https://github.com/sethcarney/mdm-vscode/security/advisories/new) to create a private advisory — this is the preferred method as it keeps the report confidential and allows coordinated disclosure.
+
+Please include:
+- A description of the vulnerability and its potential impact
+- Steps to reproduce the issue
+- Any suggested mitigations or patches
+
+### Response Timeline
+
+- **Acknowledgment**: within 48 hours
+- **Status update**: within 7 days
+- **Resolution or workaround**: within 30 days for critical issues, 90 days for others
+
+Security researchers who responsibly disclose valid vulnerabilities will be credited in the release notes.
 
 ## Scope
 

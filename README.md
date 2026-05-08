@@ -67,15 +67,16 @@ Press `F5` in VS Code to open the Extension Development Host with the extension 
 
 ### Releasing
 
-Push a tag matching `v*.*.*` to trigger the release workflow:
+Bump the version in `package.json` and push to `main`:
 
 ```sh
-git tag v0.2.0
-git push origin v0.2.0
+# edit package.json: "version": "0.2.0"
+git commit -am "chore: release v0.2.0"
+git push origin main
 ```
 
-This builds the VSIX, generates a signed provenance attestation, and creates a GitHub release. If the `VSCE_PAT` secret is set, it also publishes to the VS Code Marketplace.
+The release workflow detects the new version, packages the extension, generates SLSA provenance, and creates a GitHub release. If the `VSCE_PAT` secret is set, it also publishes to the VS Code Marketplace.
 
 ## License
 
-[MIT](LICENSE)
+[Apache-2.0](LICENSE)

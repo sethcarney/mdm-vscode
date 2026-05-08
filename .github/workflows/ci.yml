@@ -11,32 +11,20 @@ permissions:
 
 jobs:
   build:
+    name: Build and Lint
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@4bc047ad259df6fc24a6c9b0f9a0cb08cf17fbe # v1.2.2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: latest
 
       - name: Install dependencies
-        run: bun install --frozen-lockfile
+        run: bun install
+
+      - name: Compile TypeScript
+        run: bun run compile
 
       - name: Lint
         run: bun run lint
-
-      - name: Compile
-        run: bun run compile
-
-      - name: Package extension
-        run: bun run package
-
-      - name: Upload VSIX artifact
-        uses: actions/upload-artifact@5d5d22a31266ced268874388b861e4b58bb5c2f3 # v4.3.1
-        with:
-          name: mdm-vscode-vsix
-          path: '*.vsix'
-          retention-days: 7

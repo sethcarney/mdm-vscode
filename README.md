@@ -1,18 +1,18 @@
 # MDM VS Code Extension
 
-A Visual Studio Code extension that surfaces your [MDM CLI](https://github.com/sethcarney/mdm) data — Skills, Agents, and Rules — directly in the sidebar.
+A Visual Studio Code extension that surfaces your [MDM CLI](https://github.com/sethcarney/mdm) data - Skills, Agents, and Rules - directly in the sidebar.
 
 [![CI](https://github.com/sethcarney/mdm-vscode/actions/workflows/ci.yml/badge.svg)](https://github.com/sethcarney/mdm-vscode/actions/workflows/ci.yml)
 [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/sethcarney/mdm-vscode/badge)](https://securityscorecards.dev/viewer/?uri=github.com/sethcarney/mdm-vscode)
 
 ## Features
 
-- **Activity Bar icon** — dedicated MDM panel in the left sidebar
+- **Activity Bar icon** - dedicated MDM panel in the left sidebar
 - **Three collapsible sections**: Skills · Agents · Rules
 - **Live data** fetched from the MDM CLI on demand
 - **Refresh button** per section to reload without restarting VS Code
 - **Copy name** context menu action on any item
-- **Graceful error handling** — shows a clear message and settings shortcut when the CLI is not found
+- **Graceful error handling** - shows a clear message and settings shortcut when the CLI is not found
 
 ## Requirements
 
@@ -75,7 +75,7 @@ git commit -am "chore: release v0.2.0"
 git push origin main
 ```
 
-The release workflow detects the new version, packages the extension, generates SLSA provenance, and creates a GitHub release. If the `VSCE_PAT` secret is set, it also publishes to the VS Code Marketplace.
+The release workflow detects the new version, packages the extension, generates SLSA provenance, and creates a GitHub release with the `.vsix` attached. Download the `.vsix` from the release and upload it manually to the VS Code Marketplace.
 
 ## License
 

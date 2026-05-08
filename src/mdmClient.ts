@@ -112,7 +112,7 @@ function normalizeItem(item: unknown): MdmItem {
     const name = String(
       obj['name'] ?? obj['id'] ?? obj['title'] ?? obj['slug'] ?? Object.values(obj)[0] ?? 'Unknown'
     );
-    const description = obj['description'] != null ? String(obj['description']) : undefined;
+    const description = obj['description'] !== null && obj['description'] !== undefined ? String(obj['description']) : undefined;
     return { name, description };
   }
   return { name: String(item) };

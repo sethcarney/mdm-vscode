@@ -55,7 +55,7 @@ export function activate(context: vscode.ExtensionContext): void {
 }
 
 function checkCliAndWarn(client: MdmClient): void {
-  client.checkInstalled().then(installed => {
+  void client.checkInstalled().then(installed => {
     if (!installed) {
       void vscode.window
         .showErrorMessage(

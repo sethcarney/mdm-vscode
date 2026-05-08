@@ -112,7 +112,7 @@ jobs:
           gh release create "v${{ needs.check.outputs.version }}" \
             *.vsix \
             *.intoto.jsonl \
-            --title "MDM VS Code Extension v${{ needs.check.outputs.version }}" \
+            --title "v${{ needs.check.outputs.version }}" \
             --generate-notes \
             --repo ${{ github.repository }}
 

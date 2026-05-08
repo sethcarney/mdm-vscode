@@ -1,5 +1,5 @@
 {
-  "name": "mdm-vscode",
+  "name": "mdm",
   "displayName": "MDM",
   "description": "VS Code extension for the MDM CLI tool — browse Skills and Agents from the sidebar.",
   "version": "0.1.0",

@@ -1,0 +1,156 @@
+{
+  "name": "mdm-vscode",
+  "displayName": "MDM",
+  "description": "VS Code extension for the MDM CLI tool — browse Skills and Agents from the sidebar.",
+  "version": "0.1.0",
+  "publisher": "sethcarney",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sethcarney/mdm-vscode.git"
+  },
+  "bugs": {
+    "url": "https://github.com/sethcarney/mdm-vscode/issues"
+  },
+  "homepage": "https://github.com/sethcarney/mdm-vscode#readme",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Other"],
+  "keywords": ["mdm", "cli", "skills", "agents", "management"],
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "contributes": {
+    "configuration": {
+      "title": "MDM",
+      "properties": {
+        "mdm.cliPath": {
+          "type": "string",
+          "default": "mdm",
+          "markdownDescription": "Path to the `mdm` CLI executable. Defaults to `\"mdm\"`, which assumes the binary is in your `PATH`."
+        }
+      }
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "mdm-explorer",
+          "title": "MDM",
+          "icon": "resources/mdm.svg"
+        }
+      ]
+    },
+    "views": {
+      "mdm-explorer": [
+        {
+          "id": "mdmSkills",
+          "name": "Skills",
+          "contextualTitle": "MDM Skills"
+        },
+        {
+          "id": "mdmAgents",
+          "name": "Agents",
+          "contextualTitle": "MDM Agents"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "mdm.refreshSkills",
+        "title": "Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "mdm.refreshAgents",
+        "title": "Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "mdm.refreshAll",
+        "title": "MDM: Refresh All Views",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "mdm.copyName",
+        "title": "Copy Name"
+      },
+      {
+        "command": "mdm.doctor",
+        "title": "MDM Doctor",
+        "icon": "$(pulse)"
+      },
+      {
+        "command": "mdm.installSkills",
+        "title": "Install Configured Project Skills",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "mdm.updateSkill",
+        "title": "Update Skill",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "mdm.deleteSkill",
+        "title": "Remove Skill",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "mdm.deleteAgent",
+        "title": "Remove Agent",
+        "icon": "$(trash)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "mdm.doctor",
+          "when": "view == mdmSkills",
+          "group": "navigation@1"
+        },
+        {
+          "command": "mdm.refreshSkills",
+          "when": "view == mdmSkills",
+          "group": "navigation@2"
+        },
+        {
+          "command": "mdm.refreshAgents",
+          "when": "view == mdmAgents",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "mdm.updateSkill",
+          "when": "viewItem == mdm-skill",
+          "group": "inline@1"
+        },
+        {
+          "command": "mdm.deleteSkill",
+          "when": "viewItem == mdm-skill",
+          "group": "inline@2"
+        },
+        {
+          "command": "mdm.copyName",
+          "when": "viewItem == mdm-skill || viewItem == mdm-agent",
+          "group": "context"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "bun run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "lint": "eslint src --ext .ts",
+    "package": "vsce package --no-dependencies"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "@vscode/vsce": "^2.26.0",
+    "eslint": "^8.57.0",
+    "typescript": "^5.4.0"
+  }
+}

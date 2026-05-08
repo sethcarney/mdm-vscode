@@ -1,35 +1,44 @@
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import { access } from 'fs/promises';
+import * as os from 'os';
+import * as path from 'path';
 import * as vscode from 'vscode';
 
 const execAsync = promisify(exec);
 
-export type MdmResourceType = 'skills' | 'agents' | 'rules';
+export type MdmResourceType = 'skills' | 'agents';
+export type MdmScope = 'global' | 'project';
 
 export interface MdmItem {
   name: string;
   description?: string;
+  scope: MdmScope;
+  /** Absolute path to the file this item represents, if any. */
+  filePath?: string;
+  /** Human-readable status label, e.g. "✓ installed". */
+  status?: string;
 }
 
 export class MdmClient {
-  // Cache the installed check so we don't shell out on every tree refresh.
   private _installed: boolean | undefined;
 
   private get cliPath(): string {
     return vscode.workspace.getConfiguration('mdm').get<string>('cliPath', 'mdm');
   }
 
-  /** Call when the user changes mdm.cliPath so we re-probe on the next check. */
+  private get workspaceRoot(): string | undefined {
+    return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  }
+
   clearCache(): void {
     this._installed = undefined;
   }
 
   async checkInstalled(): Promise<boolean> {
-    if (this._installed !== undefined) {
-      return this._installed;
-    }
+    if (this._installed !== undefined) return this._installed;
     try {
-      await execAsync(`"${this.cliPath}" --version`, { timeout: 5000 });
+      await execAsync(`"${this.cliPath}" --version`, { timeout: 5000, cwd: this.workspaceRoot });
       this._installed = true;
     } catch {
       this._installed = false;
@@ -37,83 +46,148 @@ export class MdmClient {
     return this._installed;
   }
 
-  /**
-   * Fetch items for a resource.  Tries progressively simpler command forms:
-   *   mdm <resource> list --json  →  mdm <resource> list  →  mdm <resource>
-   * JSON and plain-text outputs are both handled.
-   */
   async listItems(resource: MdmResourceType): Promise<MdmItem[]> {
-    const cli = `"${this.cliPath}"`;
-    const attempts = [
-      `${cli} ${resource} list --json`,
-      `${cli} ${resource} list`,
-      `${cli} ${resource}`,
-    ];
-
-    let lastError: unknown;
-    for (const cmd of attempts) {
-      try {
-        const { stdout } = await execAsync(cmd, { timeout: 10_000 });
-        return parseOutput(stdout);
-      } catch (err) {
-        lastError = err;
-      }
-    }
-
-    const msg = lastError instanceof Error ? lastError.message : String(lastError);
-    throw new Error(`Failed to list ${resource}: ${msg}`);
-  }
-}
-
-function parseOutput(raw: string): MdmItem[] {
-  const text = raw.trim();
-  if (!text) {
-    return [];
+    if (resource === 'skills') return this.listSkills();
+    return this.listAgents();
   }
 
-  // Attempt JSON decode first.
-  try {
-    const data: unknown = JSON.parse(text);
-    if (Array.isArray(data)) {
-      return data.map(normalizeItem);
-    }
-    if (typeof data === 'object' && data !== null) {
-      // Handle { skills: [...] } or { data: [...] } wrapper objects.
-      for (const val of Object.values(data as Record<string, unknown>)) {
-        if (Array.isArray(val)) {
-          return val.map(normalizeItem);
-        }
-      }
-    }
-  } catch {
-    // Fall through to plain-text parsing.
-  }
-
-  return text
-    .split('\n')
-    .map(line => line.trim())
-    .filter(line => line.length > 0 && !line.startsWith('#'))
-    .map(line => {
-      // Support "name: description" or "name - description" formats.
-      const match = /^([^:-]{1,40})[:-]\s+(.+)$/.exec(line);
-      if (match) {
-        return { name: match[1].trim(), description: match[2].trim() };
-      }
-      return { name: line };
-    });
-}
-
-function normalizeItem(item: unknown): MdmItem {
-  if (typeof item === 'string') {
-    return { name: item };
-  }
-  if (typeof item === 'object' && item !== null) {
-    const obj = item as Record<string, unknown>;
-    const name = String(
-      obj['name'] ?? obj['id'] ?? obj['title'] ?? obj['slug'] ?? Object.values(obj)[0] ?? 'Unknown'
+  async removeSkill(name: string, scope: MdmScope): Promise<void> {
+    const scopeFlag = scope === 'global' ? '--global' : '';
+    await execAsync(
+      `"${this.cliPath}" skills remove ${name} -y ${scopeFlag}`.trimEnd(),
+      { timeout: 30_000, cwd: this.workspaceRoot }
     );
-    const description = obj['description'] !== null && obj['description'] !== undefined ? String(obj['description']) : undefined;
-    return { name, description };
   }
-  return { name: String(item) };
+
+  async updateSkill(name: string, scope: MdmScope): Promise<void> {
+    const scopeFlag = scope === 'global' ? '-g' : '-p';
+    await execAsync(
+      `"${this.cliPath}" skills update ${name} -y ${scopeFlag}`,
+      { timeout: 60_000, cwd: this.workspaceRoot }
+    );
+  }
+
+  // TODO: https://github.com/sethcarney/mdm/issues/55 — blocked on CLI support for non-interactive removal
+  // async removeAgent(name: string, scope: MdmScope): Promise<void> {
+  //   const slug = name.toLowerCase().replace(/\s+/g, '-');
+  //   const scopeFlag = scope === 'global' ? '--global' : '';
+  //   await execAsync(
+  //     `"${this.cliPath}" agents remove ${scopeFlag} ${slug}`.replace(/\s+/g, ' ').trimEnd(),
+  //     { timeout: 10_000, cwd: this.workspaceRoot }
+  //   );
+  // }
+
+  async hasSkillsLockFile(): Promise<boolean> {
+    const root = this.workspaceRoot;
+    if (!root) { return false; }
+    try {
+      await access(path.join(root, 'skills-lock.json'));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async runDoctor(): Promise<string> {
+    const { stdout } = await execAsync(
+      `"${this.cliPath}" doctor`,
+      { timeout: 30_000, cwd: this.workspaceRoot }
+    );
+    return stripAnsi(stdout);
+  }
+
+  async installSkills(): Promise<void> {
+    await execAsync(
+      `"${this.cliPath}" skills install -y`,
+      { timeout: 60_000, cwd: this.workspaceRoot }
+    );
+  }
+
+  private async listSkills(): Promise<MdmItem[]> {
+    const { stdout } = await execAsync(
+      `"${this.cliPath}" skills list --json`,
+      { timeout: 10_000, cwd: this.workspaceRoot }
+    );
+    return parseSkillsJson(stdout);
+  }
+
+  private async listAgents(): Promise<MdmItem[]> {
+    const opts = { timeout: 10_000, cwd: this.workspaceRoot };
+    const results: MdmItem[] = [];
+
+    try {
+      const { stdout } = await execAsync(`"${this.cliPath}" agents list --global`, opts);
+      results.push(...parseAgentsText(stdout, 'global'));
+    } catch { /* no global agents */ }
+
+    try {
+      const { stdout } = await execAsync(`"${this.cliPath}" agents list`, opts);
+      results.push(...parseAgentsText(stdout, 'project'));
+    } catch (err) {
+      const stdout = (err as Record<string, unknown>)['stdout'];
+      if (typeof stdout === 'string') results.push(...parseAgentsText(stdout, 'project'));
+    }
+
+    const globalAgentsFile = path.join(os.homedir(), '.agents', 'AGENTS.md');
+    const projectAgentsFile = this.workspaceRoot ? path.join(this.workspaceRoot, 'AGENTS.md') : undefined;
+    return results.map(item => ({
+      ...item,
+      filePath: item.scope === 'global' ? globalAgentsFile : projectAgentsFile,
+    }));
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Parsers
+// ---------------------------------------------------------------------------
+
+function stripAnsi(text: string): string {
+  // eslint-disable-next-line no-control-regex
+  return text.replace(/\x1B\[[0-9;]*m/g, '');
+}
+
+function parseSkillsJson(raw: string): MdmItem[] {
+  const text = raw.trim();
+  if (!text) return [];
+
+  const data: unknown = JSON.parse(text);
+  if (!Array.isArray(data)) return [];
+
+  return data.map(entry => {
+    const obj = entry as Record<string, unknown>;
+    const name = String(obj['Name'] ?? obj['name'] ?? 'Unknown');
+    const desc = obj['Description'] ?? obj['description'];
+    const scopeRaw = String(obj['Scope'] ?? obj['scope'] ?? 'global').toLowerCase();
+    const itemPath = String(obj['Path'] ?? obj['path'] ?? '');
+    return {
+      name,
+      description: desc !== undefined && desc !== null ? String(desc) : undefined,
+      scope: scopeRaw === 'project' ? 'project' : 'global',
+      filePath: itemPath ? path.join(itemPath, 'SKILL.md') : undefined,
+    } satisfies MdmItem;
+  });
+}
+
+function parseAgentsText(raw: string, defaultScope: MdmScope): MdmItem[] {
+  const text = stripAnsi(raw).trim();
+  if (!text || /^no agents/i.test(text)) return [];
+
+  const items: MdmItem[] = [];
+  let currentScope: MdmScope = defaultScope;
+
+  for (const line of text.split('\n')) {
+    if (/global scope/i.test(line)) { currentScope = 'global'; continue; }
+    if (/project scope/i.test(line)) { currentScope = 'project'; continue; }
+    if (!/^\s{2}/.test(line) || !line.trim()) continue;
+
+    const clean = line.trim();
+    const match = /^(.+?)\s{3,}(.+)$/.exec(clean);
+    if (match) {
+      items.push({ name: match[1].trim(), status: match[2].trim(), scope: currentScope });
+    } else {
+      items.push({ name: clean, scope: currentScope });
+    }
+  }
+
+  return items;
 }

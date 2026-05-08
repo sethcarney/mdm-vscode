@@ -1,56 +1,137 @@
 import * as vscode from 'vscode';
 import { MdmClient } from './mdmClient';
-import { MdmTreeProvider } from './mdmTreeProvider';
+import { MdmTreeItem, MdmTreeProvider } from './mdmTreeProvider';
 
 export function activate(context: vscode.ExtensionContext): void {
   const client = new MdmClient();
+  const outputChannel = vscode.window.createOutputChannel('MDM');
+  context.subscriptions.push(outputChannel);
 
   const skillsProvider = new MdmTreeProvider(client, 'skills');
   const agentsProvider = new MdmTreeProvider(client, 'agents');
-  const rulesProvider = new MdmTreeProvider(client, 'rules');
 
   context.subscriptions.push(
     vscode.window.createTreeView('mdmSkills', {
       treeDataProvider: skillsProvider,
-      showCollapseAll: false,
+      showCollapseAll: true,
     }),
     vscode.window.createTreeView('mdmAgents', {
       treeDataProvider: agentsProvider,
-      showCollapseAll: false,
-    }),
-    vscode.window.createTreeView('mdmRules', {
-      treeDataProvider: rulesProvider,
-      showCollapseAll: false,
+      showCollapseAll: true,
     }),
 
     vscode.commands.registerCommand('mdm.refreshSkills', () => skillsProvider.refresh()),
     vscode.commands.registerCommand('mdm.refreshAgents', () => agentsProvider.refresh()),
-    vscode.commands.registerCommand('mdm.refreshRules', () => rulesProvider.refresh()),
     vscode.commands.registerCommand('mdm.refreshAll', () => {
       skillsProvider.refresh();
       agentsProvider.refresh();
-      rulesProvider.refresh();
     }),
 
-    vscode.commands.registerCommand('mdm.copyName', async (item: vscode.TreeItem) => {
+    vscode.commands.registerCommand('mdm.doctor', async () => {
+      try {
+        const output = await vscode.window.withProgress(
+          { location: vscode.ProgressLocation.Notification, title: 'Running MDM doctor…' },
+          () => client.runDoctor()
+        );
+        outputChannel.clear();
+        outputChannel.appendLine(output);
+        outputChannel.show(true);
+      } catch (err) {
+        void vscode.window.showErrorMessage(
+          `MDM doctor failed: ${err instanceof Error ? err.message : String(err)}`
+        );
+      }
+    }),
+
+    vscode.commands.registerCommand('mdm.installSkills', async () => {
+      try {
+        await vscode.window.withProgress(
+          { location: vscode.ProgressLocation.Notification, title: 'Installing project skills…' },
+          () => client.installSkills()
+        );
+        skillsProvider.refresh();
+      } catch (err) {
+        void vscode.window.showErrorMessage(
+          `Failed to install skills: ${err instanceof Error ? err.message : String(err)}`
+        );
+      }
+    }),
+
+    vscode.commands.registerCommand('mdm.copyName', async (item: MdmTreeItem) => {
       const label = typeof item.label === 'string' ? item.label : item.label?.label ?? '';
       await vscode.env.clipboard.writeText(label);
       vscode.window.setStatusBarMessage(`Copied: ${label}`, 3000);
     }),
 
-    // Re-probe CLI and refresh all views when the path setting changes.
+    vscode.commands.registerCommand('mdm.deleteSkill', async (item: MdmTreeItem) => {
+      const name = item.mdmItem?.name;
+      const scope = item.mdmItem?.scope ?? 'project';
+      if (!name) { return; }
+
+      const answer = await vscode.window.showWarningMessage(
+        `Remove skill "${name}" (${scope})?`,
+        { modal: true },
+        'Remove'
+      );
+      if (answer !== 'Remove') { return; }
+
+      try {
+        await client.removeSkill(name, scope);
+        skillsProvider.refresh();
+      } catch (err) {
+        void vscode.window.showErrorMessage(
+          `Failed to remove skill: ${err instanceof Error ? err.message : String(err)}`
+        );
+      }
+    }),
+
+    vscode.commands.registerCommand('mdm.updateSkill', async (item: MdmTreeItem) => {
+      const name = item.mdmItem?.name;
+      const scope = item.mdmItem?.scope ?? 'project';
+      if (!name) { return; }
+
+      try {
+        await vscode.window.withProgress(
+          { location: vscode.ProgressLocation.Notification, title: `Updating skill "${name}"…` },
+          () => client.updateSkill(name, scope)
+        );
+        skillsProvider.refresh();
+      } catch (err) {
+        void vscode.window.showErrorMessage(
+          `Failed to update skill: ${err instanceof Error ? err.message : String(err)}`
+        );
+      }
+    }),
+
+    // TODO: re-enable once mdm CLI supports non-interactive agent removal
+    // https://github.com/sethcarney/mdm/issues/55
+    // vscode.commands.registerCommand('mdm.deleteAgent', async (item: MdmTreeItem) => {
+    //   const name = item.mdmItem?.name;
+    //   const scope = item.mdmItem?.scope ?? 'project';
+    //   if (!name) { return; }
+    //   const answer = await vscode.window.showWarningMessage(
+    //     `Remove agent "${name}" (${scope})?`, { modal: true }, 'Remove'
+    //   );
+    //   if (answer !== 'Remove') { return; }
+    //   try {
+    //     await client.removeAgent(name, scope);
+    //     agentsProvider.refresh();
+    //   } catch (err) {
+    //     void vscode.window.showErrorMessage(
+    //       `Failed to remove agent: ${err instanceof Error ? err.message : String(err)}`
+    //     );
+    //   }
+    // }),
+
     vscode.workspace.onDidChangeConfiguration(e => {
       if (e.affectsConfiguration('mdm.cliPath')) {
         client.clearCache();
         skillsProvider.refresh();
         agentsProvider.refresh();
-        rulesProvider.refresh();
       }
     })
   );
 
-  // Check CLI availability at activation time so the user sees the error
-  // promptly rather than only when they expand a view for the first time.
   checkCliAndWarn(client);
 }
 
@@ -65,10 +146,7 @@ function checkCliAndWarn(client: MdmClient): void {
         )
         .then(action => {
           if (action === 'Configure Path') {
-            void vscode.commands.executeCommand(
-              'workbench.action.openSettings',
-              'mdm.cliPath'
-            );
+            void vscode.commands.executeCommand('workbench.action.openSettings', 'mdm.cliPath');
           }
         });
     }

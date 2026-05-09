@@ -2,7 +2,7 @@
   "name": "mdm-sidebar",
   "displayName": "MDM",
   "description": "VS Code extension for the MDM CLI tool — browse Skills and Agents from the sidebar.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "SethsSoftware",
   "license": "Apache-2.0",
   "repository": {
@@ -17,8 +17,17 @@
     "vscode": "^1.85.0"
   },
   "icon": "resources/mdm.png",
-  "categories": ["AI", "Other"],
-  "keywords": ["mdm", "cli", "skills", "agents", "management"],
+  "categories": [
+    "AI",
+    "Other"
+  ],
+  "keywords": [
+    "mdm",
+    "cli",
+    "skills",
+    "agents",
+    "management"
+  ],
   "activationEvents": [],
   "main": "./out/extension.js",
   "contributes": {

@@ -79,6 +79,7 @@ export class MdmTreeProvider implements vscode.TreeDataProvider<MdmTreeItem> {
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
 
   private _itemsPromise: Promise<MdmItem[]> | undefined;
+  private _refreshTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(
     private readonly client: MdmClient,
@@ -86,8 +87,12 @@ export class MdmTreeProvider implements vscode.TreeDataProvider<MdmTreeItem> {
   ) {}
 
   refresh(): void {
-    this._itemsPromise = undefined;
-    this._onDidChangeTreeData.fire();
+    if (this._refreshTimer !== undefined) { clearTimeout(this._refreshTimer); }
+    this._refreshTimer = setTimeout(() => {
+      this._refreshTimer = undefined;
+      this._itemsPromise = undefined;
+      this._onDidChangeTreeData.fire();
+    }, 100);
   }
 
   getTreeItem(element: MdmTreeItem): vscode.TreeItem {

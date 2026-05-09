@@ -103,25 +103,24 @@ export function activate(context: vscode.ExtensionContext): void {
       }
     }),
 
-    // TODO: re-enable once mdm CLI supports non-interactive agent removal
-    // https://github.com/sethcarney/mdm/issues/55
-    // vscode.commands.registerCommand('mdm.deleteAgent', async (item: MdmTreeItem) => {
-    //   const name = item.mdmItem?.name;
-    //   const scope = item.mdmItem?.scope ?? 'project';
-    //   if (!name) { return; }
-    //   const answer = await vscode.window.showWarningMessage(
-    //     `Remove agent "${name}" (${scope})?`, { modal: true }, 'Remove'
-    //   );
-    //   if (answer !== 'Remove') { return; }
-    //   try {
-    //     await client.removeAgent(name, scope);
-    //     agentsProvider.refresh();
-    //   } catch (err) {
-    //     void vscode.window.showErrorMessage(
-    //       `Failed to remove agent: ${err instanceof Error ? err.message : String(err)}`
-    //     );
-    //   }
-    // }),
+    vscode.commands.registerCommand('mdm.deleteAgent', async (item: MdmTreeItem) => {
+      const name = item.mdmItem?.name;
+      const scope = item.mdmItem?.scope ?? 'project';
+      if (!name) { return; }
+      const answer = await vscode.window.showWarningMessage(
+        `Remove agent "${name}" (${scope})?`, { modal: true }, 'Remove'
+      );
+      if (answer !== 'Remove') { return; }
+      try {
+        const slug = name.toLowerCase().replace(/\s+/g, '-');
+        await client.removeAgent(slug, scope === 'global');
+        agentsProvider.refresh();
+      } catch (err) {
+        void vscode.window.showErrorMessage(
+          `Failed to remove agent: ${err instanceof Error ? err.message : String(err)}`
+        );
+      }
+    }),
 
     vscode.workspace.onDidChangeConfiguration(e => {
       if (e.affectsConfiguration('mdm.cliPath')) {

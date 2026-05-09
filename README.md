@@ -1,18 +1,21 @@
 # MDM VS Code Extension
 
-A Visual Studio Code extension that surfaces your [MDM CLI](https://github.com/sethcarney/mdm) data — Skills, Agents, and Rules — directly in the sidebar.
+A Visual Studio Code extension that surfaces your [MDM CLI](https://github.com/sethcarney/mdm) data directly in the sidebar.
+
+Manage your markdown-driven Skills, Agents, and Rules through the VS Code UI, with MDM running under the hood.
 
 [![CI](https://github.com/sethcarney/mdm-vscode/actions/workflows/ci.yml/badge.svg)](https://github.com/sethcarney/mdm-vscode/actions/workflows/ci.yml)
 [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/sethcarney/mdm-vscode/badge)](https://securityscorecards.dev/viewer/?uri=github.com/sethcarney/mdm-vscode)
 
 ## Features
 
-- **Activity Bar icon** — dedicated MDM panel in the left sidebar
+- **Activity Bar icon** - dedicated MDM panel in the left sidebar
 - **Three collapsible sections**: Skills · Agents · Rules
+- **Markdown management in VS Code** - manage markdown-backed items in the UI while MDM handles the CLI work behind the scenes
 - **Live data** fetched from the MDM CLI on demand
 - **Refresh button** per section to reload without restarting VS Code
 - **Copy name** context menu action on any item
-- **Graceful error handling** — shows a clear message and settings shortcut when the CLI is not found
+- **Graceful error handling** - shows a clear message and settings shortcut when the CLI is not found
 
 ## Requirements
 
@@ -27,21 +30,17 @@ If you installed the CLI to a non-standard location, set `mdm.cliPath` in VS Cod
 
 ## Extension Settings
 
-| Setting | Default | Description |
-|---------|---------|-------------|
+| Setting       | Default | Description                                                           |
+| ------------- | ------- | --------------------------------------------------------------------- |
 | `mdm.cliPath` | `"mdm"` | Path to the `mdm` executable. Override when the CLI is not in `PATH`. |
 
 ## CLI Commands Used
 
-The extension tries each form in order, stopping at the first success:
+The extension queries Skills, Agents, and Rules through the MDM CLI and uses compatible command fallbacks across CLI versions.
 
-| View | Commands tried |
-|------|----------------|
-| Skills | `mdm skills list --json` → `mdm skills list` → `mdm skills` |
-| Agents | `mdm agents list --json` → `mdm agents list` → `mdm agents` |
-| Rules  | `mdm rules list --json`  → `mdm rules list`  → `mdm rules`  |
+Both JSON and plain-text output are supported.
 
-Both **JSON** and **plain-text** output are supported. JSON items may contain `name`/`id`/`title`/`slug` and an optional `description` field.
+Implementation details are documented in [AGENTS.md](AGENTS.md).
 
 ## Development
 
@@ -58,12 +57,12 @@ Press `F5` in VS Code to open the Extension Development Host with the extension 
 
 ### Scripts
 
-| Command | Description |
-|---------|-------------|
+| Command           | Description                  |
+| ----------------- | ---------------------------- |
 | `bun run compile` | Compile TypeScript to `out/` |
-| `bun run watch` | Watch mode |
-| `bun run lint` | Run ESLint |
-| `bun run package` | Package as `.vsix` |
+| `bun run watch`   | Watch mode                   |
+| `bun run lint`    | Run ESLint                   |
+| `bun run package` | Package as `.vsix`           |
 
 ### Releasing
 
@@ -75,7 +74,7 @@ git commit -am "chore: release v0.2.0"
 git push origin main
 ```
 
-The release workflow detects the new version, packages the extension, generates SLSA provenance, and creates a GitHub release. If the `VSCE_PAT` secret is set, it also publishes to the VS Code Marketplace.
+The release workflow detects the new version, packages the extension, generates SLSA provenance, and creates a GitHub release with the `.vsix` attached. Download the `.vsix` from the release and upload it manually to the VS Code Marketplace.
 
 ## License
 

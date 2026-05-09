@@ -58,6 +58,11 @@
           "contextualTitle": "MDM Skills"
         },
         {
+          "id": "mdmRules",
+          "name": "Rules",
+          "contextualTitle": "MDM Rules"
+        },
+        {
           "id": "mdmAgents",
           "name": "Agents",
           "contextualTitle": "MDM Agents"
@@ -133,6 +138,26 @@
         "command": "mdm.deleteAgent",
         "title": "Remove Agent",
         "icon": "$(trash)"
+      },
+      {
+        "command": "mdm.refreshRules",
+        "title": "Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "mdm.rulesLinkAgent",
+        "title": "Link Agent Rules",
+        "icon": "$(link)"
+      },
+      {
+        "command": "mdm.rulesLink",
+        "title": "Link",
+        "icon": "$(link)"
+      },
+      {
+        "command": "mdm.rulesUnlink",
+        "title": "Unlink",
+        "icon": "$(debug-disconnect)"
       }
     ],
     "menus": {
@@ -171,6 +196,16 @@
           "command": "mdm.refreshAgents",
           "when": "view == mdmAgents",
           "group": "navigation@2"
+        },
+        {
+          "command": "mdm.rulesLinkAgent",
+          "when": "view == mdmRules",
+          "group": "navigation@1"
+        },
+        {
+          "command": "mdm.refreshRules",
+          "when": "view == mdmRules",
+          "group": "navigation@2"
         }
       ],
       "view/item/context": [
@@ -198,6 +233,16 @@
           "command": "mdm.copyName",
           "when": "viewItem == mdm-skill || viewItem == mdm-agent",
           "group": "context@2"
+        },
+        {
+          "command": "mdm.rulesLink",
+          "when": "viewItem == mdm-rule-missing",
+          "group": "inline@1"
+        },
+        {
+          "command": "mdm.rulesUnlink",
+          "when": "viewItem == mdm-rule-linked",
+          "group": "inline@1"
         }
       ]
     }

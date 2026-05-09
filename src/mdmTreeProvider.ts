@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { MdmClient, MdmItem, MdmResourceType, MdmScope } from './mdmClient';
+import { MdmClient, MdmItem, MdmResourceType, MdmScope, RulesEntry } from './mdmClient';
 
 type TreeItemKind = 'scope-header' | 'resource-item' | 'message' | 'action';
 
@@ -164,6 +164,115 @@ export class MdmTreeProvider implements vscode.TreeDataProvider<MdmTreeItem> {
     }
     return this._itemsPromise;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Rules tree
+// ---------------------------------------------------------------------------
+
+export class MdmRulesItem extends vscode.TreeItem {
+  readonly kind: 'rule-entry' | 'message';
+  readonly entry?: RulesEntry;
+
+  constructor(
+    label: string,
+    collapsibleState: vscode.TreeItemCollapsibleState,
+    options:
+      | { kind: 'rule-entry'; entry: RulesEntry }
+      | { kind: 'message'; isError?: boolean }
+  ) {
+    super(label, collapsibleState);
+    this.kind = options.kind;
+
+    if (options.kind === 'message') {
+      this.iconPath = options.isError
+        ? new vscode.ThemeIcon('warning', new vscode.ThemeColor('problemsWarningIcon.foreground'))
+        : new vscode.ThemeIcon('info');
+      return;
+    }
+
+    // rule-entry
+    const { entry } = options;
+    this.entry = entry;
+
+    if (entry.state === 'linked') {
+      this.iconPath = new vscode.ThemeIcon('link');
+      this.description = `linked → ${entry.target ?? 'AGENTS.md'}`;
+      this.contextValue = 'mdm-rule-linked';
+      this.tooltip = `${entry.file}\nSymlink → ${entry.target ?? 'AGENTS.md'}`;
+    } else if (entry.state === 'real') {
+      this.iconPath = new vscode.ThemeIcon('file-text');
+      this.description = 'source file';
+      this.tooltip = `${entry.file}\nThis is the AGENTS.md source of truth`;
+    } else {
+      // missing
+      this.iconPath = new vscode.ThemeIcon('debug-disconnect');
+      this.description = 'not linked';
+      this.contextValue = 'mdm-rule-missing';
+      this.tooltip = `${entry.file}\nNot yet linked to AGENTS.md`;
+    }
+  }
+}
+
+export class MdmRulesTreeProvider implements vscode.TreeDataProvider<MdmRulesItem> {
+  private readonly _onDidChangeTreeData =
+    new vscode.EventEmitter<MdmRulesItem | undefined | null | void>();
+  readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
+
+  private _statusPromise: Promise<RulesEntry[]> | undefined;
+  private _refreshTimer: ReturnType<typeof setTimeout> | undefined;
+
+  constructor(private readonly client: MdmClient) {}
+
+  refresh(): void {
+    if (this._refreshTimer !== undefined) { clearTimeout(this._refreshTimer); }
+    this._refreshTimer = setTimeout(() => {
+      this._refreshTimer = undefined;
+      this._statusPromise = undefined;
+      this._onDidChangeTreeData.fire();
+    }, 100);
+  }
+
+  getTreeItem(element: MdmRulesItem): vscode.TreeItem {
+    return element;
+  }
+
+  async getChildren(element?: MdmRulesItem): Promise<MdmRulesItem[]> {
+    if (element) { return []; }
+
+    const installed = await this.client.checkInstalled();
+    if (!installed) {
+      return [rulesMessageItem('MDM CLI not found — check mdm.cliPath in settings', true)];
+    }
+
+    let entries: RulesEntry[];
+    try {
+      entries = await this.fetchStatus();
+    } catch (err) {
+      return [rulesMessageItem(err instanceof Error ? err.message : String(err), true)];
+    }
+
+    const linked = entries.filter(e => e.state === 'linked');
+
+    if (linked.length === 0) {
+      return [rulesMessageItem('No rules linked')];
+    }
+
+    return linked.map(e =>
+      new MdmRulesItem(e.file, vscode.TreeItemCollapsibleState.None, { kind: 'rule-entry', entry: e })
+    );
+  }
+
+  private fetchStatus(): Promise<RulesEntry[]> {
+    if (!this._statusPromise) {
+      this._statusPromise = this.client.rulesStatus();
+    }
+    return this._statusPromise;
+  }
+}
+
+function rulesMessageItem(message: string, isError = false): MdmRulesItem {
+  return new MdmRulesItem(message, vscode.TreeItemCollapsibleState.None, { kind: 'message', isError });
 }
 
 function installPromptItem(): MdmTreeItem {

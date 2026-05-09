@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { MdmClient, MdmScope } from './mdmClient';
-import { MdmTreeItem, MdmTreeProvider } from './mdmTreeProvider';
+import { MdmRulesItem, MdmRulesTreeProvider, MdmTreeItem, MdmTreeProvider } from './mdmTreeProvider';
 
 export function activate(context: vscode.ExtensionContext): void {
   const client = new MdmClient();
@@ -9,6 +9,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
   const skillsProvider = new MdmTreeProvider(client, 'skills');
   const agentsProvider = new MdmTreeProvider(client, 'agents');
+  const rulesProvider = new MdmRulesTreeProvider(client);
 
   context.subscriptions.push(
     vscode.window.createTreeView('mdmSkills', {
@@ -19,12 +20,18 @@ export function activate(context: vscode.ExtensionContext): void {
       treeDataProvider: agentsProvider,
       showCollapseAll: true,
     }),
+    vscode.window.createTreeView('mdmRules', {
+      treeDataProvider: rulesProvider,
+      showCollapseAll: true,
+    }),
 
     vscode.commands.registerCommand('mdm.refreshSkills', () => skillsProvider.refresh()),
     vscode.commands.registerCommand('mdm.refreshAgents', () => agentsProvider.refresh()),
+    vscode.commands.registerCommand('mdm.refreshRules', () => rulesProvider.refresh()),
     vscode.commands.registerCommand('mdm.refreshAll', () => {
       skillsProvider.refresh();
       agentsProvider.refresh();
+      rulesProvider.refresh();
     }),
 
     vscode.commands.registerCommand('mdm.doctor', async () => {
@@ -351,11 +358,96 @@ export function activate(context: vscode.ExtensionContext): void {
       }
     }),
 
+    vscode.commands.registerCommand('mdm.rulesLinkAgent', async () => {
+      let entries: import('./mdmClient').RulesEntry[];
+      try {
+        entries = await client.rulesStatus();
+      } catch (err) {
+        void vscode.window.showErrorMessage(
+          `Failed to get rules status: ${err instanceof Error ? err.message : String(err)}`
+        );
+        return;
+      }
+
+      const missing = entries.filter(e => e.state === 'missing' && e.agents.length > 0);
+      if (missing.length === 0) {
+        void vscode.window.showInformationMessage('All agent rules are already linked.');
+        return;
+      }
+
+      const picks = missing.map(e => ({
+        label: e.file,
+        description: e.agents.join(', '),
+        entry: e,
+      }));
+
+      const picked = await vscode.window.showQuickPick(picks, {
+        placeHolder: 'Select a rule file to link to AGENTS.md',
+      });
+      if (!picked) { return; }
+
+      const agent = picked.entry.agents[0];
+      try {
+        await vscode.window.withProgress(
+          { location: vscode.ProgressLocation.Notification, title: `Linking ${picked.entry.file}…` },
+          () => client.rulesLink(agent)
+        );
+        rulesProvider.refresh();
+      } catch (err) {
+        void vscode.window.showErrorMessage(
+          `Failed to link rules: ${err instanceof Error ? err.message : String(err)}`
+        );
+      }
+    }),
+
+    vscode.commands.registerCommand('mdm.rulesLink', async (item: MdmRulesItem) => {
+      const entry = item.entry;
+      if (!entry) { return; }
+      const agent = entry.agents[0];
+      if (!agent) { return; }
+      try {
+        await vscode.window.withProgress(
+          { location: vscode.ProgressLocation.Notification, title: `Linking ${entry.file}…` },
+          () => client.rulesLink(agent)
+        );
+        rulesProvider.refresh();
+      } catch (err) {
+        void vscode.window.showErrorMessage(
+          `Failed to link rules: ${err instanceof Error ? err.message : String(err)}`
+        );
+      }
+    }),
+
+    vscode.commands.registerCommand('mdm.rulesUnlink', async (item: MdmRulesItem) => {
+      const entry = item.entry;
+      if (!entry) { return; }
+      const agent = entry.agents[0];
+      if (!agent) { return; }
+      const answer = await vscode.window.showWarningMessage(
+        `Unlink ${entry.file}?`,
+        { modal: true },
+        'Unlink'
+      );
+      if (answer !== 'Unlink') { return; }
+      try {
+        await vscode.window.withProgress(
+          { location: vscode.ProgressLocation.Notification, title: `Unlinking ${entry.file}…` },
+          () => client.rulesUnlink(agent)
+        );
+        rulesProvider.refresh();
+      } catch (err) {
+        void vscode.window.showErrorMessage(
+          `Failed to unlink rules: ${err instanceof Error ? err.message : String(err)}`
+        );
+      }
+    }),
+
     vscode.workspace.onDidChangeConfiguration(e => {
       if (e.affectsConfiguration('mdm.cliPath')) {
         client.clearCache();
         skillsProvider.refresh();
         agentsProvider.refresh();
+        rulesProvider.refresh();
       }
     })
   );

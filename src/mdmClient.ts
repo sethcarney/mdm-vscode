@@ -10,6 +10,13 @@ const execAsync = promisify(exec);
 export type MdmResourceType = 'skills' | 'agents';
 export type MdmScope = 'global' | 'project';
 
+export interface RulesEntry {
+  file: string;
+  state: 'linked' | 'missing' | 'real' | string;
+  target?: string;
+  agents: string[];
+}
+
 export interface KnownAgent {
   name: string;
   displayName: string;
@@ -221,6 +228,30 @@ export class MdmClient {
       { timeout: 30_000, cwd: this.workspaceRoot }
     );
     return stripAnsi(stdout);
+  }
+
+  async rulesStatus(): Promise<RulesEntry[]> {
+    const { stdout } = await execAsync(
+      `"${this.cliPath}" rules status --json`,
+      { timeout: 10_000, cwd: this.workspaceRoot }
+    );
+    const text = stdout.trim();
+    if (!text) { return []; }
+    return JSON.parse(text) as RulesEntry[];
+  }
+
+  async rulesLink(agent: string): Promise<void> {
+    await execAsync(
+      `"${this.cliPath}" rules link --agent ${agent} -y`,
+      { timeout: 10_000, cwd: this.workspaceRoot }
+    );
+  }
+
+  async rulesUnlink(agent: string): Promise<void> {
+    await execAsync(
+      `"${this.cliPath}" rules unlink --agent ${agent} -y`,
+      { timeout: 10_000, cwd: this.workspaceRoot }
+    );
   }
 
   async installSkills(): Promise<void> {

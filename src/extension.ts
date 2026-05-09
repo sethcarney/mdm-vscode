@@ -11,6 +11,13 @@ export function activate(context: vscode.ExtensionContext): void {
   const agentsProvider = new MdmTreeProvider(client, 'agents');
   const rulesProvider = new MdmRulesTreeProvider(client);
 
+  const doctorStatusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
+  doctorStatusBar.command = 'mdm.doctor';
+  doctorStatusBar.text = '$(pulse) MDM';
+  doctorStatusBar.tooltip = 'Run MDM Doctor';
+  doctorStatusBar.show();
+  context.subscriptions.push(doctorStatusBar);
+
   context.subscriptions.push(
     vscode.window.createTreeView('mdmSkills', {
       treeDataProvider: skillsProvider,
@@ -78,6 +85,35 @@ export function activate(context: vscode.ExtensionContext): void {
       });
       if (!repo) { return; }
 
+      // Pre-flight audit — runs before scope picker so user decides on security first
+      let skipAudit = false;
+      try {
+        const auditResults = await vscode.window.withProgress(
+          { location: vscode.ProgressLocation.Notification, title: 'Checking security…' },
+          () => client.preInstallAudit(repo.trim())
+        );
+        const issues = auditResults.flatMap(r => (r.audits ?? []).filter(a => a.status === 'warn' || a.status === 'fail'));
+        if (issues.length > 0) {
+          const skillId = auditResults[0]?.skillId;
+          const skillsShUrl = skillId ? `https://skills.sh/${skillId}` : undefined;
+          const buttons: string[] = ['Install Anyway'];
+          if (skillsShUrl) { buttons.push('View on skills.sh'); }
+          const answer = await vscode.window.showWarningMessage(
+            `Security findings detected in "${repo.trim()}" (${issues.length} issue${issues.length > 1 ? 's' : ''}).`,
+            { modal: true },
+            ...buttons
+          );
+          if (answer === 'View on skills.sh' && skillsShUrl) {
+            void vscode.env.openExternal(vscode.Uri.parse(skillsShUrl));
+            return;
+          }
+          if (answer !== 'Install Anyway') { return; }
+          skipAudit = true;
+        }
+      } catch {
+        // network failure — continue without pre-flight, let install-time audit handle it
+      }
+
       const scopePick = await vscode.window.showQuickPick(
         [
           { label: 'Project', description: 'Install into the current workspace', scope: 'project' as const },
@@ -87,7 +123,7 @@ export function activate(context: vscode.ExtensionContext): void {
       );
       if (!scopePick) { return; }
 
-      const ok = await installSkillWithRetry(client, repo.trim(), scopePick.scope, repo.trim());
+      const ok = await installSkillWithRetry(client, repo.trim(), scopePick.scope, repo.trim(), undefined, skipAudit);
       if (ok) { skillsProvider.refresh(); }
     }),
 

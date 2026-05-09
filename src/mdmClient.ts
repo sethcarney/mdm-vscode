@@ -157,8 +157,10 @@ export class MdmClient {
     );
   }
 
-  async preInstallAudit(skillSource: string, skillName: string): Promise<AuditResult[]> {
-    const args = ['skills', 'audit', '--source', skillSource, '--skill', skillName, '--json'];
+  async preInstallAudit(skillSource: string, skillName?: string): Promise<AuditResult[]> {
+    const args = ['skills', 'audit', '--source', skillSource];
+    if (skillName) { args.push('--skill', skillName); }
+    args.push('--json');
     const parse = (text: string): AuditResult[] => {
       const trimmed = text.trim();
       return trimmed ? (JSON.parse(trimmed) as AuditResult[]) : [];

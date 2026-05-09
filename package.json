@@ -105,6 +105,11 @@
         "icon": "$(trash)"
       },
       {
+        "command": "mdm.addAgent",
+        "title": "Add Agent",
+        "icon": "$(add)"
+      },
+      {
         "command": "mdm.deleteAgent",
         "title": "Remove Agent",
         "icon": "$(trash)"
@@ -123,9 +128,14 @@
           "group": "navigation@2"
         },
         {
+          "command": "mdm.addAgent",
+          "when": "view == mdmAgents",
+          "group": "navigation@1"
+        },
+        {
           "command": "mdm.refreshAgents",
           "when": "view == mdmAgents",
-          "group": "navigation"
+          "group": "navigation@2"
         }
       ],
       "view/item/context": [

@@ -10,6 +10,12 @@ const execAsync = promisify(exec);
 export type MdmResourceType = 'skills' | 'agents';
 export type MdmScope = 'global' | 'project';
 
+export interface KnownAgent {
+  name: string;
+  displayName: string;
+  installed: boolean;
+}
+
 export interface MdmItem {
   name: string;
   description?: string;
@@ -81,6 +87,25 @@ export class MdmClient {
       `"${this.cliPath}" ${args.join(' ')}`,
       { timeout: 10_000, cwd: this.workspaceRoot }
     );
+  }
+
+  async addAgent(name: string, global: boolean): Promise<void> {
+    const args = ['agents', 'add', name];
+    if (global) { args.push('--global'); }
+    await execAsync(
+      `"${this.cliPath}" ${args.join(' ')}`,
+      { timeout: 10_000, cwd: this.workspaceRoot }
+    );
+  }
+
+  async listAvailableAgents(): Promise<KnownAgent[]> {
+    const { stdout } = await execAsync(
+      `"${this.cliPath}" agents list --available --json`,
+      { timeout: 10_000, cwd: this.workspaceRoot }
+    );
+    const text = stdout.trim();
+    if (!text) { return []; }
+    return JSON.parse(text) as KnownAgent[];
   }
 
   async hasSkillsLockFile(): Promise<boolean> {

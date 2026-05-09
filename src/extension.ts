@@ -103,6 +103,65 @@ export function activate(context: vscode.ExtensionContext): void {
       }
     }),
 
+    vscode.commands.registerCommand('mdm.addAgent', async () => {
+      const scopePick = await vscode.window.showQuickPick(
+        [
+          { label: 'Project', description: 'Add to the current workspace', global: false },
+          { label: 'Global', description: 'Add to your user-level agent list', global: true },
+        ],
+        { placeHolder: 'Select scope for the new agent' }
+      );
+      if (!scopePick) { return; }
+
+      let available: { label: string; description: string; agentName: string }[];
+      try {
+        const [allAgents, configured] = await Promise.all([
+          client.listAvailableAgents(),
+          client.listItems('agents'),
+        ]);
+        const configuredNames = new Set(
+          configured
+            .filter(a => a.scope === (scopePick.global ? 'global' : 'project'))
+            .map(a => a.name.toLowerCase().replace(/\s+/g, '-'))
+        );
+        available = allAgents
+          .filter(a => !configuredNames.has(a.name))
+          .map(a => ({
+            label: a.displayName,
+            description: a.name + (a.installed ? '  ✓ installed' : ''),
+            agentName: a.name,
+          }));
+      } catch (err) {
+        void vscode.window.showErrorMessage(
+          `Failed to fetch agents: ${err instanceof Error ? err.message : String(err)}`
+        );
+        return;
+      }
+
+      if (available.length === 0) {
+        void vscode.window.showInformationMessage('All known agents are already configured for this scope.');
+        return;
+      }
+
+      const picked = await vscode.window.showQuickPick(available, {
+        placeHolder: 'Select an agent to add',
+        matchOnDescription: true,
+      });
+      if (!picked) { return; }
+
+      try {
+        await vscode.window.withProgress(
+          { location: vscode.ProgressLocation.Notification, title: `Adding agent "${picked.label}"…` },
+          () => client.addAgent(picked.agentName, scopePick.global)
+        );
+        agentsProvider.refresh();
+      } catch (err) {
+        void vscode.window.showErrorMessage(
+          `Failed to add agent: ${err instanceof Error ? err.message : String(err)}`
+        );
+      }
+    }),
+
     vscode.commands.registerCommand('mdm.deleteAgent', async (item: MdmTreeItem) => {
       const name = item.mdmItem?.name;
       const scope = item.mdmItem?.scope ?? 'project';

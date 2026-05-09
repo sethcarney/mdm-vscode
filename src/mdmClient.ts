@@ -16,6 +16,36 @@ export interface KnownAgent {
   installed: boolean;
 }
 
+export interface FindSkillResult {
+  name: string;
+  description: string;
+  source: string;
+  stars?: number;
+  owner?: string;
+  repo?: string;
+}
+
+export interface AuditProvider {
+  provider: string;
+  slug?: string;
+  status: string;
+  riskLevel?: string;
+  summary?: string;
+  auditedAt?: string;
+}
+
+export interface AuditResult {
+  name: string;
+  scope: string;
+  sourceType: string;
+  source: string;
+  updatedAt?: string;
+  syncStatus: string;
+  audits?: AuditProvider[];
+  skillId?: string;
+  registryError?: boolean;
+}
+
 export interface MdmItem {
   name: string;
   description?: string;
@@ -106,6 +136,72 @@ export class MdmClient {
     const text = stdout.trim();
     if (!text) { return []; }
     return JSON.parse(text) as KnownAgent[];
+  }
+
+  async addSkill(repo: string, scope: MdmScope, skillName?: string, opts: { allowHiddenChars?: boolean; skipAudit?: boolean } = {}): Promise<void> {
+    const args = ['skills', 'add', repo, '-y', '--fail-on-audit'];
+    if (skillName) { args.push('-s', skillName); }
+    if (scope === 'global') { args.push('-g'); } else { args.push('-p'); }
+    if (opts.allowHiddenChars) { args.push('--allow-hidden-chars'); }
+    if (opts.skipAudit) { args.push('--skip-audit'); }
+    await execAsync(
+      `"${this.cliPath}" ${args.join(' ')}`,
+      { timeout: 120_000, cwd: this.workspaceRoot }
+    );
+  }
+
+  async preInstallAudit(skillSource: string, skillName: string): Promise<AuditResult[]> {
+    const args = ['skills', 'audit', '--source', skillSource, '--skill', skillName, '--json'];
+    const parse = (text: string): AuditResult[] => {
+      const trimmed = text.trim();
+      return trimmed ? (JSON.parse(trimmed) as AuditResult[]) : [];
+    };
+    try {
+      const { stdout } = await execAsync(
+        `"${this.cliPath}" ${args.join(' ')}`,
+        { timeout: 15_000, cwd: this.workspaceRoot }
+      );
+      return parse(stdout);
+    } catch (err) {
+      const stdout = (err as Record<string, unknown>)['stdout'];
+      if (typeof stdout === 'string' && stdout.trim()) {
+        return parse(stdout);
+      }
+      throw err;
+    }
+  }
+
+  async findSkills(query: string): Promise<FindSkillResult[]> {
+    const { stdout } = await execAsync(
+      `"${this.cliPath}" skills find ${JSON.stringify(query)} --json`,
+      { timeout: 15_000, cwd: this.workspaceRoot }
+    );
+    const text = stdout.trim();
+    if (!text) { return []; }
+    return JSON.parse(text) as FindSkillResult[];
+  }
+
+  async auditSkills(scope?: MdmScope): Promise<AuditResult[]> {
+    const args = ['skills', 'audit', '--json'];
+    if (scope === 'global') { args.push('-g'); }
+    if (scope === 'project') { args.push('-p'); }
+    const { stdout } = await execAsync(
+      `"${this.cliPath}" ${args.join(' ')}`,
+      { timeout: 30_000, cwd: this.workspaceRoot }
+    );
+    const text = stdout.trim();
+    if (!text) { return []; }
+    return JSON.parse(text) as AuditResult[];
+  }
+
+  async updateAllSkills(scope?: MdmScope): Promise<void> {
+    const args = ['skills', 'update', '-y'];
+    if (scope === 'global') { args.push('-g'); }
+    if (scope === 'project') { args.push('-p'); }
+    await execAsync(
+      `"${this.cliPath}" ${args.join(' ')}`,
+      { timeout: 120_000, cwd: this.workspaceRoot }
+    );
   }
 
   async hasSkillsLockFile(): Promise<boolean> {

@@ -4,6 +4,10 @@ A Visual Studio Code extension that surfaces your [MDM CLI](https://github.com/s
 
 Manage your markdown-driven Skills, Agents, and Rules through the VS Code UI, with MDM running under the hood.
 
+[![VS Marketplace Version](https://vsmarketplacebadges.dev/version/SethsSoftware.mdm-sidebar.svg)](https://marketplace.visualstudio.com/items?itemName=SethsSoftware.mdm-sidebar)
+[![VS Marketplace Installs](https://vsmarketplacebadges.dev/installs/SethsSoftware.mdm-sidebar.svg)](https://marketplace.visualstudio.com/items?itemName=SethsSoftware.mdm-sidebar)
+[![VS Marketplace Rating](https://vsmarketplacebadges.dev/rating/SethsSoftware.mdm-sidebar.svg)](https://marketplace.visualstudio.com/items?itemName=SethsSoftware.mdm-sidebar)
+[![License](https://img.shields.io/badge/license-Apache%202.0-green.svg)](LICENSE)
 [![CI](https://github.com/sethcarney/mdm-vscode/actions/workflows/ci.yml/badge.svg)](https://github.com/sethcarney/mdm-vscode/actions/workflows/ci.yml)
 [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/sethcarney/mdm-vscode/badge)](https://securityscorecards.dev/viewer/?uri=github.com/sethcarney/mdm-vscode)
 

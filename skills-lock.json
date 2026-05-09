@@ -1,6 +1,17 @@
 {
   "version": 1,
-  "skills": {},
+  "skills": {
+    "gh-issue": {
+      "source": "sethcarney/custom-plugins",
+      "ref": "main",
+      "sourceType": "github"
+    },
+    "gh-project-scope": {
+      "source": "sethcarney/custom-plugins",
+      "ref": "main",
+      "sourceType": "github"
+    }
+  },
   "configuredAgents": [
     "claude-code",
     "github-copilot"

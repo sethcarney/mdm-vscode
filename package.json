@@ -2,7 +2,7 @@
   "name": "mdm-sidebar",
   "displayName": "MDM",
   "description": "VS Code extension for the MDM CLI tool — browse Skills and Agents from the sidebar.",
-  "version": "0.1.1",
+  "version": "1.0.0",
   "publisher": "SethsSoftware",
   "license": "Apache-2.0",
   "repository": {
@@ -58,6 +58,11 @@
           "contextualTitle": "MDM Skills"
         },
         {
+          "id": "mdmRules",
+          "name": "Rules",
+          "contextualTitle": "MDM Rules"
+        },
+        {
           "id": "mdmAgents",
           "name": "Agents",
           "contextualTitle": "MDM Agents"
@@ -95,6 +100,26 @@
         "icon": "$(cloud-download)"
       },
       {
+        "command": "mdm.findSkill",
+        "title": "Find Skill",
+        "icon": "$(search)"
+      },
+      {
+        "command": "mdm.addSkill",
+        "title": "Add Skill",
+        "icon": "$(add)"
+      },
+      {
+        "command": "mdm.updateAllSkills",
+        "title": "Update All Skills",
+        "icon": "$(sync)"
+      },
+      {
+        "command": "mdm.auditSkills",
+        "title": "Audit Skills",
+        "icon": "$(shield)"
+      },
+      {
         "command": "mdm.updateSkill",
         "title": "Update Skill",
         "icon": "$(cloud-download)"
@@ -105,27 +130,82 @@
         "icon": "$(trash)"
       },
       {
+        "command": "mdm.addAgent",
+        "title": "Add Agent",
+        "icon": "$(add)"
+      },
+      {
         "command": "mdm.deleteAgent",
         "title": "Remove Agent",
         "icon": "$(trash)"
+      },
+      {
+        "command": "mdm.refreshRules",
+        "title": "Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "mdm.rulesLinkAgent",
+        "title": "Link Agent Rules",
+        "icon": "$(link)"
+      },
+      {
+        "command": "mdm.rulesLink",
+        "title": "Link",
+        "icon": "$(link)"
+      },
+      {
+        "command": "mdm.rulesUnlink",
+        "title": "Unlink",
+        "icon": "$(debug-disconnect)"
       }
     ],
     "menus": {
       "view/title": [
         {
-          "command": "mdm.doctor",
+          "command": "mdm.findSkill",
           "when": "view == mdmSkills",
           "group": "navigation@1"
         },
         {
-          "command": "mdm.refreshSkills",
+          "command": "mdm.addSkill",
           "when": "view == mdmSkills",
           "group": "navigation@2"
         },
         {
+          "command": "mdm.updateAllSkills",
+          "when": "view == mdmSkills",
+          "group": "navigation@3"
+        },
+        {
+          "command": "mdm.doctor",
+          "when": "view == mdmSkills",
+          "group": "navigation@4"
+        },
+        {
+          "command": "mdm.refreshSkills",
+          "when": "view == mdmSkills",
+          "group": "navigation@5"
+        },
+        {
+          "command": "mdm.addAgent",
+          "when": "view == mdmAgents",
+          "group": "navigation@1"
+        },
+        {
           "command": "mdm.refreshAgents",
           "when": "view == mdmAgents",
-          "group": "navigation"
+          "group": "navigation@2"
+        },
+        {
+          "command": "mdm.rulesLinkAgent",
+          "when": "view == mdmRules",
+          "group": "navigation@1"
+        },
+        {
+          "command": "mdm.refreshRules",
+          "when": "view == mdmRules",
+          "group": "navigation@2"
         }
       ],
       "view/item/context": [
@@ -140,9 +220,29 @@
           "group": "inline@2"
         },
         {
+          "command": "mdm.deleteAgent",
+          "when": "viewItem == mdm-agent",
+          "group": "inline@1"
+        },
+        {
+          "command": "mdm.auditSkills",
+          "when": "viewItem == mdm-skill",
+          "group": "context@1"
+        },
+        {
           "command": "mdm.copyName",
           "when": "viewItem == mdm-skill || viewItem == mdm-agent",
-          "group": "context"
+          "group": "context@2"
+        },
+        {
+          "command": "mdm.rulesLink",
+          "when": "viewItem == mdm-rule-missing",
+          "group": "inline@1"
+        },
+        {
+          "command": "mdm.rulesUnlink",
+          "when": "viewItem == mdm-rule-linked",
+          "group": "inline@1"
         }
       ]
     }

@@ -255,7 +255,7 @@ export class MdmRulesTreeProvider implements vscode.TreeDataProvider<MdmRulesIte
     const linked = entries.filter(e => e.state === 'linked');
 
     if (linked.length === 0) {
-      return [rulesMessageItem('No rules linked')];
+      return [rulesMessageItem('No rules linked — use the link button above to add one')];
     }
 
     return linked.map(e =>

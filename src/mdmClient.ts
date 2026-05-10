@@ -1,11 +1,11 @@
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { access } from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 export type MdmResourceType = 'skills' | 'agents';
 export type MdmScope = 'global' | 'project';
@@ -86,9 +86,9 @@ export class MdmClient {
   }
 
   async checkInstalled(): Promise<boolean> {
-    if (this._installed !== undefined) return this._installed;
+    if (this._installed !== undefined) { return this._installed; }
     try {
-      await execAsync(`"${this.cliPath}" --version`, { timeout: 5000, cwd: this.workspaceRoot });
+      await execFileAsync(this.cliPath, ['--version'], { timeout: 5000, cwd: this.workspaceRoot });
       this._installed = true;
     } catch {
       this._installed = false;
@@ -97,47 +97,36 @@ export class MdmClient {
   }
 
   async listItems(resource: MdmResourceType): Promise<MdmItem[]> {
-    if (resource === 'skills') return this.listSkills();
+    if (resource === 'skills') { return this.listSkills(); }
     return this.listAgents();
   }
 
   async removeSkill(name: string, scope: MdmScope): Promise<void> {
-    const scopeFlag = scope === 'global' ? '--global' : '';
-    await execAsync(
-      `"${this.cliPath}" skills remove ${name} -y ${scopeFlag}`.trimEnd(),
-      { timeout: 30_000, cwd: this.workspaceRoot }
-    );
+    const args = ['skills', 'remove', name, '-y'];
+    if (scope === 'global') { args.push('--global'); }
+    await execFileAsync(this.cliPath, args, { timeout: 30_000, cwd: this.workspaceRoot });
   }
 
   async updateSkill(name: string, scope: MdmScope): Promise<void> {
-    const scopeFlag = scope === 'global' ? '-g' : '-p';
-    await execAsync(
-      `"${this.cliPath}" skills update ${name} -y ${scopeFlag}`,
-      { timeout: 60_000, cwd: this.workspaceRoot }
-    );
+    const args = ['skills', 'update', name, '-y', scope === 'global' ? '-g' : '-p'];
+    await execFileAsync(this.cliPath, args, { timeout: 60_000, cwd: this.workspaceRoot });
   }
 
   async removeAgent(name: string, global: boolean): Promise<void> {
     const args = ['agents', 'remove', name, '-y'];
     if (global) { args.push('--global'); }
-    await execAsync(
-      `"${this.cliPath}" ${args.join(' ')}`,
-      { timeout: 10_000, cwd: this.workspaceRoot }
-    );
+    await execFileAsync(this.cliPath, args, { timeout: 10_000, cwd: this.workspaceRoot });
   }
 
   async addAgent(name: string, global: boolean): Promise<void> {
     const args = ['agents', 'add', name];
     if (global) { args.push('--global'); }
-    await execAsync(
-      `"${this.cliPath}" ${args.join(' ')}`,
-      { timeout: 10_000, cwd: this.workspaceRoot }
-    );
+    await execFileAsync(this.cliPath, args, { timeout: 10_000, cwd: this.workspaceRoot });
   }
 
   async listAvailableAgents(): Promise<KnownAgent[]> {
-    const { stdout } = await execAsync(
-      `"${this.cliPath}" agents list --available --json`,
+    const { stdout } = await execFileAsync(
+      this.cliPath, ['agents', 'list', '--available', '--json'],
       { timeout: 10_000, cwd: this.workspaceRoot }
     );
     const text = stdout.trim();
@@ -151,10 +140,7 @@ export class MdmClient {
     if (scope === 'global') { args.push('-g'); } else { args.push('-p'); }
     if (opts.allowHiddenChars) { args.push('--allow-hidden-chars'); }
     if (opts.skipAudit) { args.push('--skip-audit'); }
-    await execAsync(
-      `"${this.cliPath}" ${args.join(' ')}`,
-      { timeout: 120_000, cwd: this.workspaceRoot }
-    );
+    await execFileAsync(this.cliPath, args, { timeout: 120_000, cwd: this.workspaceRoot });
   }
 
   async preInstallAudit(skillSource: string, skillName?: string): Promise<AuditResult[]> {
@@ -166,10 +152,7 @@ export class MdmClient {
       return trimmed ? (JSON.parse(trimmed) as AuditResult[]) : [];
     };
     try {
-      const { stdout } = await execAsync(
-        `"${this.cliPath}" ${args.join(' ')}`,
-        { timeout: 15_000, cwd: this.workspaceRoot }
-      );
+      const { stdout } = await execFileAsync(this.cliPath, args, { timeout: 15_000, cwd: this.workspaceRoot });
       return parse(stdout);
     } catch (err) {
       const stdout = (err as Record<string, unknown>)['stdout'];
@@ -181,8 +164,8 @@ export class MdmClient {
   }
 
   async findSkills(query: string): Promise<FindSkillResult[]> {
-    const { stdout } = await execAsync(
-      `"${this.cliPath}" skills find ${JSON.stringify(query)} --json`,
+    const { stdout } = await execFileAsync(
+      this.cliPath, ['skills', 'find', query, '--json'],
       { timeout: 15_000, cwd: this.workspaceRoot }
     );
     const text = stdout.trim();
@@ -194,10 +177,7 @@ export class MdmClient {
     const args = ['skills', 'audit', '--json'];
     if (scope === 'global') { args.push('-g'); }
     if (scope === 'project') { args.push('-p'); }
-    const { stdout } = await execAsync(
-      `"${this.cliPath}" ${args.join(' ')}`,
-      { timeout: 30_000, cwd: this.workspaceRoot }
-    );
+    const { stdout } = await execFileAsync(this.cliPath, args, { timeout: 30_000, cwd: this.workspaceRoot });
     const text = stdout.trim();
     if (!text) { return []; }
     return JSON.parse(text) as AuditResult[];
@@ -207,10 +187,7 @@ export class MdmClient {
     const args = ['skills', 'update', '-y'];
     if (scope === 'global') { args.push('-g'); }
     if (scope === 'project') { args.push('-p'); }
-    await execAsync(
-      `"${this.cliPath}" ${args.join(' ')}`,
-      { timeout: 120_000, cwd: this.workspaceRoot }
-    );
+    await execFileAsync(this.cliPath, args, { timeout: 120_000, cwd: this.workspaceRoot });
   }
 
   async hasSkillsLockFile(): Promise<boolean> {
@@ -225,16 +202,16 @@ export class MdmClient {
   }
 
   async runDoctor(): Promise<string> {
-    const { stdout } = await execAsync(
-      `"${this.cliPath}" doctor`,
+    const { stdout } = await execFileAsync(
+      this.cliPath, ['doctor'],
       { timeout: 30_000, cwd: this.workspaceRoot }
     );
     return stripAnsi(stdout);
   }
 
   async rulesStatus(): Promise<RulesEntry[]> {
-    const { stdout } = await execAsync(
-      `"${this.cliPath}" rules status --json`,
+    const { stdout } = await execFileAsync(
+      this.cliPath, ['rules', 'status', '--json'],
       { timeout: 10_000, cwd: this.workspaceRoot }
     );
     const text = stdout.trim();
@@ -243,29 +220,29 @@ export class MdmClient {
   }
 
   async rulesLink(agent: string): Promise<void> {
-    await execAsync(
-      `"${this.cliPath}" rules link --agent ${agent} -y`,
+    await execFileAsync(
+      this.cliPath, ['rules', 'link', '--agent', agent, '-y'],
       { timeout: 10_000, cwd: this.workspaceRoot }
     );
   }
 
   async rulesUnlink(agent: string): Promise<void> {
-    await execAsync(
-      `"${this.cliPath}" rules unlink --agent ${agent} -y`,
+    await execFileAsync(
+      this.cliPath, ['rules', 'unlink', '--agent', agent, '-y'],
       { timeout: 10_000, cwd: this.workspaceRoot }
     );
   }
 
   async installSkills(): Promise<void> {
-    await execAsync(
-      `"${this.cliPath}" skills install -y`,
+    await execFileAsync(
+      this.cliPath, ['skills', 'install', '-y'],
       { timeout: 60_000, cwd: this.workspaceRoot }
     );
   }
 
   private async listSkills(): Promise<MdmItem[]> {
-    const { stdout } = await execAsync(
-      `"${this.cliPath}" skills list --json`,
+    const { stdout } = await execFileAsync(
+      this.cliPath, ['skills', 'list', '--json'],
       { timeout: 10_000, cwd: this.workspaceRoot }
     );
     return parseSkillsJson(stdout);
@@ -277,9 +254,10 @@ export class MdmClient {
     const projectAgentsFile = this.workspaceRoot ? path.join(this.workspaceRoot, 'AGENTS.md') : undefined;
 
     const fetchScope = async (global: boolean): Promise<AgentJson[]> => {
-      const cmd = `"${this.cliPath}" agents list --json${global ? ' --global' : ''}`;
+      const args = ['agents', 'list', '--json'];
+      if (global) { args.push('--global'); }
       try {
-        const { stdout } = await execAsync(cmd, opts);
+        const { stdout } = await execFileAsync(this.cliPath, args, opts);
         const text = stdout.trim();
         return text ? (JSON.parse(text) as AgentJson[]) : [];
       } catch (err) {
@@ -311,10 +289,10 @@ function stripAnsi(text: string): string {
 
 function parseSkillsJson(raw: string): MdmItem[] {
   const text = raw.trim();
-  if (!text) return [];
+  if (!text) { return []; }
 
   const data: unknown = JSON.parse(text);
-  if (!Array.isArray(data)) return [];
+  if (!Array.isArray(data)) { return []; }
 
   return data.map(entry => {
     const obj = entry as Record<string, unknown>;
@@ -330,4 +308,3 @@ function parseSkillsJson(raw: string): MdmItem[] {
     } satisfies MdmItem;
   });
 }
-

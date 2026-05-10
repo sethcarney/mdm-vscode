@@ -54,7 +54,7 @@ chore: bump dependencies
 
 - TypeScript with strict mode enabled
 - ESLint: `bun run lint`
-- Prettier: `.prettierrc` — formatting is enforced by lint
+- Prettier: `.prettierrc` is provided for editor integration; there is no automated format check
 
 ## Releasing
 

@@ -73,8 +73,8 @@ Press `F5` in VS Code to open the Extension Development Host with the extension 
 Bump the version in `package.json` and push to `main`:
 
 ```sh
-# edit package.json: "version": "0.2.0"
-git commit -am "chore: release v0.2.0"
+# edit package.json: "version": "1.2.0"
+git commit -am "chore: release v1.2.0"
 git push origin main
 ```
 

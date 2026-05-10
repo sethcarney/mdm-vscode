@@ -22,12 +22,12 @@ The extension is three TypeScript files under `src/`:
 
 **`mdmClient.ts`** — all CLI interaction. Shells out to the `mdm` binary (path from `mdm.cliPath` setting, default `"mdm"`). Every `execAsync` call passes `cwd: workspaceRoot` (first open workspace folder) so that `mdm` resolves project-scope items correctly. Key methods:
 - `listItems('skills')` → `mdm skills list --json` → parses JSON with capitalized keys (`Name`, `Description`, `Scope`, `Path`). Sets `filePath` to `Path/SKILL.md` for click-to-open.
-- `listItems('agents')` → two calls: `mdm agents list --global` and `mdm agents list` (project; exits non-zero when empty, caught). Parses ANSI-stripped plain text. Sets `filePath` to `{workspaceRoot}/AGENTS.md` on all agent items.
+- `listItems('agents')` → two calls: `mdm agents list --json --global` and `mdm agents list --json` (project; exits non-zero when empty, caught). Parses JSON. Global agents get `filePath` → `~/.agents/AGENTS.md`; project agents → `{workspaceRoot}/AGENTS.md`.
 - `removeSkill` / `updateSkill` / `removeAgent` — thin wrappers with `-y` to skip CLI prompts.
 
-**`mdmTreeProvider.ts`** — a single `MdmTreeProvider` class used for both panels. Two-level tree: scope headers (`Global` / `Project`) collapse into `MdmTreeItem` leaf nodes. Items with a `filePath` get `this.command = { command: 'vscode.open', ... }` for click-to-open. `contextValue` is `'mdm-skill'` or `'mdm-agent'` — these drive the inline action buttons declared in `package.json` menus. Results are cached in `_itemsPromise` and cleared on `refresh()`.
+**`mdmTreeProvider.ts`** — two tree provider classes. `MdmTreeProvider` serves the Skills and Agents panels: two-level tree with `Global` / `Project` scope headers collapsing into `MdmTreeItem` leaf nodes; `contextValue` `'mdm-skill'` or `'mdm-agent'` drives the inline buttons declared in `package.json` menus; results cached in `_itemsPromise` and cleared on `refresh()`. `MdmRulesTreeProvider` serves the Rules panel: flat list of linked-only `MdmRulesItem` entries. Items with a `filePath` open the file on click via `vscode.open`.
 
-**`extension.ts`** — wires two `MdmTreeProvider` instances (`mdmSkills`, `mdmAgents` views) and registers all commands. Delete commands show a modal confirmation before calling `MdmClient`, then call `provider.refresh()`. The update command uses `vscode.window.withProgress` for a notification spinner.
+**`extension.ts`** — wires three providers (`skillsProvider` / `agentsProvider` as `MdmTreeProvider`; `rulesProvider` as `MdmRulesTreeProvider`) and a persistent status bar item (`$(pulse) MDM`) that runs `mdm.doctor` on click. Registers all commands. Delete commands show a modal confirmation before calling `MdmClient`, then call `provider.refresh()`. Long-running commands use `vscode.window.withProgress` for a notification spinner.
 
 ## Key constraints
 

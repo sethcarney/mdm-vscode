@@ -16,6 +16,7 @@ export function activate(context: vscode.ExtensionContext): void {
   const skillsProvider = new MdmTreeProvider(client, "skills");
   const agentsProvider = new MdmTreeProvider(client, "agents");
   const rulesProvider = new MdmRulesTreeProvider(client);
+  context.subscriptions.push(skillsProvider, agentsProvider, rulesProvider);
 
   const doctorStatusBar = vscode.window.createStatusBarItem(
     vscode.StatusBarAlignment.Right,
@@ -104,190 +105,126 @@ export function activate(context: vscode.ExtensionContext): void {
       }
     ),
 
-    vscode.commands.registerCommand("_mdm.addSkill#sideBar", async () => {
-      const repo = await vscode.window.showInputBox({
-        prompt: "GitHub repo, URL, or local path containing the skill(s)",
-        placeHolder:
-          "owner/repo  or  https://github.com/owner/repo  or  ./path/to/skill",
-        validateInput: (v) => (v.trim() ? undefined : "Repository is required")
-      });
-      if (!repo) {
-        return;
-      }
-
-      // Pre-flight audit — runs before scope picker so user decides on security first
-      let skipAudit = false;
-      try {
-        const auditResults = await vscode.window.withProgress(
-          {
-            location: vscode.ProgressLocation.Notification,
-            title: "Checking security…"
-          },
-          () => client.preInstallAudit(repo.trim())
-        );
-        const issues = auditResults.flatMap((r) =>
-          (r.audits ?? []).filter(
-            (a) => a.status === "warn" || a.status === "fail"
-          )
-        );
-        if (issues.length > 0) {
-          const skillId = auditResults[0]?.skillId;
-          const skillsShUrl = skillId
-            ? `https://skills.sh/${skillId}`
-            : undefined;
-          const buttons: string[] = ["Install Anyway"];
-          if (skillsShUrl) {
-            buttons.push("View on skills.sh");
-          }
-          const answer = await vscode.window.showWarningMessage(
-            `Security findings detected in "${repo.trim()}" (${issues.length} issue${issues.length > 1 ? "s" : ""}).`,
-            { modal: true },
-            ...buttons
-          );
-          if (answer === "View on skills.sh" && skillsShUrl) {
-            void vscode.env.openExternal(vscode.Uri.parse(skillsShUrl));
-            return;
-          }
-          if (answer !== "Install Anyway") {
-            return;
-          }
-          skipAudit = true;
-        }
-      } catch {
-        // network failure — continue without pre-flight, let install-time audit handle it
-      }
-
-      const scopePick = await vscode.window.showQuickPick(
-        [
-          {
-            label: "Project",
-            description: "Install into the current workspace",
-            scope: "project" as const
-          },
-          {
-            label: "Global",
-            description: "Install at the user level",
-            scope: "global" as const
-          }
-        ],
-        { placeHolder: "Select install scope" }
-      );
-      if (!scopePick) {
-        return;
-      }
-
-      const ok = await installSkillWithRetry(
-        client,
-        repo.trim(),
-        scopePick.scope,
-        repo.trim(),
-        undefined,
-        skipAudit
-      );
-      if (ok) {
-        skillsProvider.refresh();
-      }
-    }),
-
-    vscode.commands.registerCommand("_mdm.findSkill#sideBar", async () => {
-      const picked = await findSkillInteractive(client);
-      if (!picked) {
-        return;
-      }
-
-      let source = picked.source;
-      let label = picked.label;
-      let skillName: string | undefined = picked.skillName || undefined;
-
-      if (picked.localAction) {
-        const uris = await vscode.window.showOpenDialog({
-          canSelectFiles: false,
-          canSelectFolders: true,
-          canSelectMany: false,
-          openLabel: "Select Skill Directory",
-          title: "Select the skill directory (the one containing SKILL.md)"
-        });
-        if (!uris || uris.length === 0) {
+    vscode.commands.registerCommand(
+      "_mdm.findSkill#sideBar",
+      async (scope?: MdmScope) => {
+        const picked = await findSkillInteractive(client);
+        if (!picked) {
           return;
         }
-        source = uris[0].fsPath;
-        label = path.basename(source);
-        skillName = undefined;
-      }
 
-      // Pre-flight audit — runs before scope picker so user decides on security first
-      let skipAudit = false;
-      try {
-        const auditResults = await vscode.window.withProgress(
-          {
-            location: vscode.ProgressLocation.Notification,
-            title: `Checking security for "${label}"…`
-          },
-          () => client.preInstallAudit(source, skillName)
-        );
-        const issues = auditResults.flatMap((r) =>
-          (r.audits ?? []).filter(
-            (a) => a.status === "warn" || a.status === "fail"
-          )
-        );
-        if (issues.length > 0) {
-          const skillId = auditResults[0]?.skillId;
-          const skillsShUrl = skillId
-            ? `https://skills.sh/${skillId}`
-            : undefined;
-          const buttons: string[] = ["Install Anyway"];
-          if (skillsShUrl) {
-            buttons.push("View on skills.sh");
-          }
-          const answer = await vscode.window.showWarningMessage(
-            `Security findings detected in "${label}" (${issues.length} issue${issues.length > 1 ? "s" : ""}).`,
-            { modal: true },
-            ...buttons
-          );
-          if (answer === "View on skills.sh" && skillsShUrl) {
-            void vscode.env.openExternal(vscode.Uri.parse(skillsShUrl));
+        let source = picked.source;
+        let label = picked.label;
+        let skillName: string | undefined = picked.skillName || undefined;
+
+        if (picked.urlAction) {
+          const input = await vscode.window.showInputBox({
+            prompt: "GitHub repo, URL, or local path containing the skill(s)",
+            placeHolder:
+              "owner/repo  or  https://github.com/owner/repo  or  ./path/to/skill",
+            validateInput: (v) =>
+              v.trim() ? undefined : "Repository is required"
+          });
+          if (!input) {
             return;
           }
-          if (answer !== "Install Anyway") {
+          source = input.trim();
+          label = input.trim();
+          skillName = undefined;
+        } else if (picked.localAction) {
+          const uris = await vscode.window.showOpenDialog({
+            canSelectFiles: false,
+            canSelectFolders: true,
+            canSelectMany: false,
+            openLabel: "Select Skill Directory",
+            title: "Select the skill directory (the one containing SKILL.md)"
+          });
+          if (!uris || uris.length === 0) {
             return;
           }
-          skipAudit = true;
+          source = uris[0].fsPath;
+          label = path.basename(source);
+          skillName = undefined;
         }
-      } catch {
-        // network failure — continue without pre-flight, let install-time audit handle it
-      }
 
-      const scopePick = await vscode.window.showQuickPick(
-        [
-          {
-            label: "Project",
-            description: "Install into the current workspace",
-            scope: "project" as const
-          },
-          {
-            label: "Global",
-            description: "Install at the user level",
-            scope: "global" as const
+        // Pre-flight audit — runs before scope picker so user decides on security first
+        let skipAudit = false;
+        try {
+          const auditResults = await vscode.window.withProgress(
+            {
+              location: vscode.ProgressLocation.Notification,
+              title: `Checking security for "${label}"…`
+            },
+            () => client.preInstallAudit(source, skillName)
+          );
+          const issues = auditResults.flatMap((r) =>
+            (r.audits ?? []).filter(
+              (a) => a.status === "warn" || a.status === "fail"
+            )
+          );
+          if (issues.length > 0) {
+            const skillId = auditResults[0]?.skillId;
+            const skillsShUrl = skillId
+              ? `https://skills.sh/${skillId}`
+              : undefined;
+            const buttons: string[] = ["Install Anyway"];
+            if (skillsShUrl) {
+              buttons.push("View on skills.sh");
+            }
+            const answer = await vscode.window.showWarningMessage(
+              `Security findings detected in "${label}" (${issues.length} issue${issues.length > 1 ? "s" : ""}).`,
+              { modal: true },
+              ...buttons
+            );
+            if (answer === "View on skills.sh" && skillsShUrl) {
+              void vscode.env.openExternal(vscode.Uri.parse(skillsShUrl));
+              return;
+            }
+            if (answer !== "Install Anyway") {
+              return;
+            }
+            skipAudit = true;
           }
-        ],
-        { placeHolder: "Select install scope" }
-      );
-      if (!scopePick) {
-        return;
-      }
+        } catch {
+          // network failure — continue without pre-flight, let install-time audit handle it
+        }
 
-      const ok = await installSkillWithRetry(
-        client,
-        source,
-        scopePick.scope,
-        label,
-        skillName,
-        skipAudit
-      );
-      if (ok) {
-        skillsProvider.refresh();
+        let resolvedScope: MdmScope | undefined = scope;
+        if (!resolvedScope) {
+          const scopePick = await vscode.window.showQuickPick(
+            [
+              {
+                label: "Project",
+                description: "Install into the current workspace",
+                scope: "project" as const
+              },
+              {
+                label: "Global",
+                description: "Install at the user level",
+                scope: "global" as const
+              }
+            ],
+            { placeHolder: "Select install scope" }
+          );
+          if (!scopePick) {
+            return;
+          }
+          resolvedScope = scopePick.scope;
+        }
+
+        const ok = await installSkillWithRetry(
+          client,
+          source,
+          resolvedScope,
+          label,
+          skillName,
+          skipAudit
+        );
+        if (ok) {
+          skillsProvider.refresh();
+        }
       }
-    }),
+    ),
 
     vscode.commands.registerCommand(
       "_mdm.updateAllSkills#sideBar",
@@ -466,87 +403,92 @@ export function activate(context: vscode.ExtensionContext): void {
       }
     ),
 
-    vscode.commands.registerCommand("_mdm.addAgent#sideBar", async () => {
-      const scopePick = await vscode.window.showQuickPick(
-        [
-          {
-            label: "Project",
-            description: "Add to the current workspace",
-            global: false
-          },
-          {
-            label: "Global",
-            description: "Add to your user-level agent list",
-            global: true
+    vscode.commands.registerCommand(
+      "_mdm.addAgent#sideBar",
+      async (scope?: MdmScope) => {
+        let resolvedScope: MdmScope | undefined = scope;
+        if (!resolvedScope) {
+          const scopePick = await vscode.window.showQuickPick(
+            [
+              {
+                label: "Project",
+                description: "Add to the current workspace",
+                scope: "project" as const
+              },
+              {
+                label: "Global",
+                description: "Add to your user-level agent list",
+                scope: "global" as const
+              }
+            ],
+            { placeHolder: "Select scope for the new agent" }
+          );
+          if (!scopePick) {
+            return;
           }
-        ],
-        { placeHolder: "Select scope for the new agent" }
-      );
-      if (!scopePick) {
-        return;
-      }
+          resolvedScope = scopePick.scope;
+        }
 
-      let available: {
-        label: string;
-        description: string;
-        agentName: string;
-      }[];
-      try {
-        const [allAgents, configured] = await Promise.all([
-          client.listAvailableAgents(),
-          client.listItems("agents")
-        ]);
-        const configuredNames = new Set(
-          configured
-            .filter(
-              (a) => a.scope === (scopePick.global ? "global" : "project")
-            )
-            .map((a) => a.name.toLowerCase().replace(/\s+/g, "-"))
-        );
-        available = allAgents
-          .filter((a) => !configuredNames.has(a.name))
-          .map((a) => ({
-            label: a.displayName,
-            description: a.name + (a.installed ? "  ✓ installed" : ""),
-            agentName: a.name
-          }));
-      } catch (err) {
-        void vscode.window.showErrorMessage(
-          `Failed to fetch agents: ${err instanceof Error ? err.message : String(err)}`
-        );
-        return;
-      }
+        let available: {
+          label: string;
+          description: string;
+          agentName: string;
+        }[];
+        try {
+          const [allAgents, configured] = await Promise.all([
+            client.listAvailableAgents(),
+            client.listItems("agents")
+          ]);
+          const configuredNames = new Set(
+            configured
+              .filter((a) => a.scope === resolvedScope)
+              .map((a) => a.name.toLowerCase().replace(/\s+/g, "-"))
+          );
+          available = allAgents
+            .filter((a) => !configuredNames.has(a.name))
+            .map((a) => ({
+              label: a.displayName,
+              description: a.name + (a.installed ? "  ✓ installed" : ""),
+              agentName: a.name
+            }));
+        } catch (err) {
+          void vscode.window.showErrorMessage(
+            `Failed to fetch agents: ${err instanceof Error ? err.message : String(err)}`
+          );
+          return;
+        }
 
-      if (available.length === 0) {
-        void vscode.window.showInformationMessage(
-          "All known agents are already configured for this scope."
-        );
-        return;
-      }
+        if (available.length === 0) {
+          void vscode.window.showInformationMessage(
+            "All known agents are already configured for this scope."
+          );
+          return;
+        }
 
-      const picked = await vscode.window.showQuickPick(available, {
-        placeHolder: "Select an agent to add",
-        matchOnDescription: true
-      });
-      if (!picked) {
-        return;
-      }
+        const picked = await vscode.window.showQuickPick(available, {
+          placeHolder: "Select an agent to add",
+          matchOnDescription: true
+        });
+        if (!picked) {
+          return;
+        }
 
-      try {
-        await vscode.window.withProgress(
-          {
-            location: vscode.ProgressLocation.Notification,
-            title: `Adding agent "${picked.label}"…`
-          },
-          () => client.addAgent(picked.agentName, scopePick.global)
-        );
-        agentsProvider.refresh();
-      } catch (err) {
-        void vscode.window.showErrorMessage(
-          `Failed to add agent: ${err instanceof Error ? err.message : String(err)}`
-        );
+        try {
+          await vscode.window.withProgress(
+            {
+              location: vscode.ProgressLocation.Notification,
+              title: `Adding agent "${picked.label}"…`
+            },
+            () => client.addAgent(picked.agentName, resolvedScope)
+          );
+          agentsProvider.refresh();
+        } catch (err) {
+          void vscode.window.showErrorMessage(
+            `Failed to add agent: ${err instanceof Error ? err.message : String(err)}`
+          );
+        }
       }
-    }),
+    ),
 
     vscode.commands.registerCommand(
       "_mdm.deleteAgent#sideBar",
@@ -566,7 +508,7 @@ export function activate(context: vscode.ExtensionContext): void {
         }
         try {
           const slug = name.toLowerCase().replace(/\s+/g, "-");
-          await client.removeAgent(slug, scope === "global");
+          await client.removeAgent(slug, scope);
           agentsProvider.refresh();
         } catch (err) {
           void vscode.window.showErrorMessage(
@@ -705,34 +647,40 @@ export function activate(context: vscode.ExtensionContext): void {
 }
 
 function checkCliAndWarn(client: MdmClient): void {
-  void client.checkInstalled().then((installed) => {
-    if (!installed) {
-      void vscode.window
-        .showErrorMessage(
-          "MDM CLI not found. Install it and make sure it is in your PATH, or set mdm.cliPath.",
-          "Configure Path",
-          "Dismiss"
-        )
-        .then((action) => {
-          if (action === "Configure Path") {
-            void vscode.commands.executeCommand(
-              "workbench.action.openSettings",
-              "mdm.cliPath"
-            );
-          }
-        });
-    }
-  });
+  void client
+    .checkInstalled()
+    .then((installed) => {
+      if (!installed) {
+        void vscode.window
+          .showErrorMessage(
+            "MDM CLI not found. Install it and make sure it is in your PATH, or set mdm.cliPath.",
+            "Configure Path",
+            "Dismiss"
+          )
+          .then((action) => {
+            if (action === "Configure Path") {
+              void vscode.commands.executeCommand(
+                "workbench.action.openSettings",
+                "mdm.cliPath"
+              );
+            }
+          });
+      }
+    })
+    .catch((err) => {
+      void vscode.window.showErrorMessage(
+        `MDM: error checking CLI: ${err instanceof Error ? err.message : String(err)}`
+      );
+    });
 }
 
-export function deactivate(): void {
-  // nothing to clean up
-}
+export function deactivate(): void {}
 
 interface SkillPickItem extends vscode.QuickPickItem {
   source: string;
   skillName: string;
   localAction?: true;
+  urlAction?: true;
 }
 
 const LOCAL_PATH_ITEM: SkillPickItem = {
@@ -744,6 +692,15 @@ const LOCAL_PATH_ITEM: SkillPickItem = {
   alwaysShow: true
 };
 
+const ENTER_URL_ITEM: SkillPickItem = {
+  label: "$(repo) Enter repo URL or path…",
+  description: "owner/repo  or  https://…  ",
+  source: "",
+  skillName: "",
+  urlAction: true,
+  alwaysShow: true
+};
+
 function findSkillInteractive(
   client: MdmClient
 ): Promise<SkillPickItem | undefined> {
@@ -752,7 +709,7 @@ function findSkillInteractive(
     qp.placeholder = "Search the skills registry (e.g. typescript, git, react)";
     qp.matchOnDescription = true;
     qp.matchOnDetail = true;
-    qp.items = [LOCAL_PATH_ITEM];
+    qp.items = [ENTER_URL_ITEM, LOCAL_PATH_ITEM];
 
     let debounceTimer: ReturnType<typeof setTimeout> | undefined;
     let settled = false;
@@ -775,7 +732,7 @@ function findSkillInteractive(
         clearTimeout(debounceTimer);
       }
       if (!query) {
-        qp.items = [LOCAL_PATH_ITEM];
+        qp.items = [ENTER_URL_ITEM, LOCAL_PATH_ITEM];
         qp.busy = false;
         return;
       }
@@ -785,7 +742,7 @@ function findSkillInteractive(
         void (async () => {
           try {
             const found = await client.findSkills(query);
-            if (query !== qp.value.trim()) {
+            if (settled || query !== qp.value.trim()) {
               return;
             }
             qp.items = [
@@ -797,12 +754,13 @@ function findSkillInteractive(
                 skillName: r.name,
                 alwaysShow: true
               })),
+              ENTER_URL_ITEM,
               LOCAL_PATH_ITEM
             ];
           } catch {
             // ignore search errors mid-typing
           } finally {
-            if (query === qp.value.trim()) {
+            if (!settled && query === qp.value.trim()) {
               qp.busy = false;
             }
           }
@@ -890,9 +848,7 @@ async function installSkillWithRetry(
       return retry({ allowHiddenChars: true });
     }
 
-    void vscode.window.showErrorMessage(
-      `Failed to install skill: ${err instanceof Error ? err.message : String(err)}`
-    );
+    void vscode.window.showErrorMessage(`Failed to install skill: ${output}`);
     return false;
   }
 }

@@ -2,7 +2,7 @@
   "name": "mdm-sidebar",
   "displayName": "MDM",
   "description": "VS Code extension for the MDM CLI tool — browse Skills and Agents from the sidebar.",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "publisher": "SethsSoftware",
   "license": "Apache-2.0",
   "repository": {
@@ -82,7 +82,7 @@
       },
       {
         "command": "mdm.refreshAll",
-        "title": "MDM: Refresh All Views",
+        "title": "Refresh All Views",
         "category": "MDM",
         "icon": "$(refresh)"
       },
@@ -94,7 +94,7 @@
       {
         "command": "mdm.doctor",
         "category": "MDM",
-        "title": "MDM Doctor",
+        "title": "Doctor",
         "icon": "$(pulse)"
       },
       {
@@ -107,11 +107,6 @@
         "command": "_mdm.findSkill#sideBar",
         "title": "Find Skill",
         "icon": "$(search)"
-      },
-      {
-        "command": "_mdm.addSkill#sideBar",
-        "title": "Add Skill",
-        "icon": "$(add)"
       },
       {
         "command": "_mdm.updateAllSkills#sideBar",
@@ -183,10 +178,6 @@
           "when": "false"
         },
         {
-          "command": "_mdm.addSkill#sideBar",
-          "when": "false"
-        },
-        {
           "command": "_mdm.updateAllSkills#sideBar",
           "when": "false"
         },
@@ -234,19 +225,14 @@
           "group": "navigation@1"
         },
         {
-          "command": "_mdm.addSkill#sideBar",
+          "command": "_mdm.updateAllSkills#sideBar",
           "when": "view == mdmSkills",
           "group": "navigation@2"
         },
         {
-          "command": "_mdm.updateAllSkills#sideBar",
-          "when": "view == mdmSkills",
-          "group": "navigation@3"
-        },
-        {
           "command": "_mdm.refreshSkills#sideBar",
           "when": "view == mdmSkills",
-          "group": "navigation@4"
+          "group": "navigation@3"
         },
         {
           "command": "_mdm.addAgent#sideBar",
@@ -270,6 +256,16 @@
         }
       ],
       "view/item/context": [
+        {
+          "command": "_mdm.findSkill#sideBar",
+          "when": "viewItem == mdm-skills-scope-global || viewItem == mdm-skills-scope-project",
+          "group": "inline@1"
+        },
+        {
+          "command": "_mdm.addAgent#sideBar",
+          "when": "viewItem == mdm-agents-scope-global || viewItem == mdm-agents-scope-project",
+          "group": "inline@1"
+        },
         {
           "command": "_mdm.updateSkill#sideBar",
           "when": "viewItem == mdm-skill",

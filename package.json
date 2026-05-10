@@ -2,7 +2,7 @@
   "name": "mdm-sidebar",
   "displayName": "MDM",
   "description": "VS Code extension for the MDM CLI tool — browse Skills and Agents from the sidebar.",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "publisher": "SethsSoftware",
   "license": "Apache-2.0",
   "repository": {
@@ -71,176 +71,237 @@
     },
     "commands": [
       {
-        "command": "mdm.refreshSkills",
+        "command": "_mdm.refreshSkills#sideBar",
         "title": "Refresh",
         "icon": "$(refresh)"
       },
       {
-        "command": "mdm.refreshAgents",
+        "command": "_mdm.refreshAgents#sideBar",
         "title": "Refresh",
         "icon": "$(refresh)"
       },
       {
         "command": "mdm.refreshAll",
         "title": "MDM: Refresh All Views",
+        "category": "MDM",
         "icon": "$(refresh)"
       },
       {
-        "command": "mdm.copyName",
-        "title": "Copy Name"
+        "command": "_mdm.copyName#sideBar",
+        "title": "Copy Name",
+        "icon": "$(copy)"
       },
       {
         "command": "mdm.doctor",
+        "category": "MDM",
         "title": "MDM Doctor",
         "icon": "$(pulse)"
       },
       {
         "command": "mdm.installSkills",
+        "category": "MDM",
         "title": "Install Configured Project Skills",
         "icon": "$(cloud-download)"
       },
       {
-        "command": "mdm.findSkill",
+        "command": "_mdm.findSkill#sideBar",
         "title": "Find Skill",
         "icon": "$(search)"
       },
       {
-        "command": "mdm.addSkill",
+        "command": "_mdm.addSkill#sideBar",
         "title": "Add Skill",
         "icon": "$(add)"
       },
       {
-        "command": "mdm.updateAllSkills",
+        "command": "_mdm.updateAllSkills#sideBar",
         "title": "Update All Skills",
         "icon": "$(sync)"
       },
       {
-        "command": "mdm.auditSkills",
+        "command": "_mdm.auditSkills#sideBar",
         "title": "Audit Skills",
         "icon": "$(shield)"
       },
       {
-        "command": "mdm.updateSkill",
+        "command": "_mdm.updateSkill#sideBar",
         "title": "Update Skill",
         "icon": "$(cloud-download)"
       },
       {
-        "command": "mdm.deleteSkill",
+        "command": "_mdm.deleteSkill#sideBar",
         "title": "Remove Skill",
         "icon": "$(trash)"
       },
       {
-        "command": "mdm.addAgent",
+        "command": "_mdm.addAgent#sideBar",
         "title": "Add Agent",
         "icon": "$(add)"
       },
       {
-        "command": "mdm.deleteAgent",
+        "command": "_mdm.deleteAgent#sideBar",
         "title": "Remove Agent",
         "icon": "$(trash)"
       },
       {
-        "command": "mdm.refreshRules",
+        "command": "_mdm.refreshRules#sideBar",
         "title": "Refresh",
         "icon": "$(refresh)"
       },
       {
-        "command": "mdm.rulesLinkAgent",
+        "command": "_mdm.rulesLinkAgent#sideBar",
         "title": "Link Agent Rules",
         "icon": "$(link)"
       },
       {
-        "command": "mdm.rulesLink",
+        "command": "_mdm.rulesLink#sideBar",
         "title": "Link",
         "icon": "$(link)"
       },
       {
-        "command": "mdm.rulesUnlink",
+        "command": "_mdm.rulesUnlink#sideBar",
         "title": "Unlink",
         "icon": "$(debug-disconnect)"
       }
     ],
     "menus": {
+      "commandPalette": [
+        {
+          "command": "_mdm.refreshSkills#sideBar",
+          "when": "false"
+        },
+        {
+          "command": "_mdm.refreshAgents#sideBar",
+          "when": "false"
+        },
+        {
+          "command": "_mdm.copyName#sideBar",
+          "when": "false"
+        },
+        {
+          "command": "_mdm.findSkill#sideBar",
+          "when": "false"
+        },
+        {
+          "command": "_mdm.addSkill#sideBar",
+          "when": "false"
+        },
+        {
+          "command": "_mdm.updateAllSkills#sideBar",
+          "when": "false"
+        },
+        {
+          "command": "_mdm.auditSkills#sideBar",
+          "when": "false"
+        },
+        {
+          "command": "_mdm.updateSkill#sideBar",
+          "when": "false"
+        },
+        {
+          "command": "_mdm.deleteSkill#sideBar",
+          "when": "false"
+        },
+        {
+          "command": "_mdm.addAgent#sideBar",
+          "when": "false"
+        },
+        {
+          "command": "_mdm.deleteAgent#sideBar",
+          "when": "false"
+        },
+        {
+          "command": "_mdm.refreshRules#sideBar",
+          "when": "false"
+        },
+        {
+          "command": "_mdm.rulesLinkAgent#sideBar",
+          "when": "false"
+        },
+        {
+          "command": "_mdm.rulesLink#sideBar",
+          "when": "false"
+        },
+        {
+          "command": "_mdm.rulesUnlink#sideBar",
+          "when": "false"
+        }
+      ],
       "view/title": [
         {
-          "command": "mdm.findSkill",
+          "command": "_mdm.findSkill#sideBar",
           "when": "view == mdmSkills",
           "group": "navigation@1"
         },
         {
-          "command": "mdm.addSkill",
+          "command": "_mdm.addSkill#sideBar",
           "when": "view == mdmSkills",
           "group": "navigation@2"
         },
         {
-          "command": "mdm.updateAllSkills",
+          "command": "_mdm.updateAllSkills#sideBar",
           "when": "view == mdmSkills",
           "group": "navigation@3"
         },
         {
-          "command": "mdm.doctor",
+          "command": "_mdm.refreshSkills#sideBar",
           "when": "view == mdmSkills",
           "group": "navigation@4"
         },
         {
-          "command": "mdm.refreshSkills",
-          "when": "view == mdmSkills",
-          "group": "navigation@5"
-        },
-        {
-          "command": "mdm.addAgent",
+          "command": "_mdm.addAgent#sideBar",
           "when": "view == mdmAgents",
           "group": "navigation@1"
         },
         {
-          "command": "mdm.refreshAgents",
+          "command": "_mdm.refreshAgents#sideBar",
           "when": "view == mdmAgents",
           "group": "navigation@2"
         },
         {
-          "command": "mdm.rulesLinkAgent",
+          "command": "_mdm.rulesLinkAgent#sideBar",
           "when": "view == mdmRules",
           "group": "navigation@1"
         },
         {
-          "command": "mdm.refreshRules",
+          "command": "_mdm.refreshRules#sideBar",
           "when": "view == mdmRules",
           "group": "navigation@2"
         }
       ],
       "view/item/context": [
         {
-          "command": "mdm.updateSkill",
+          "command": "_mdm.updateSkill#sideBar",
           "when": "viewItem == mdm-skill",
           "group": "inline@1"
         },
         {
-          "command": "mdm.deleteSkill",
+          "command": "_mdm.deleteSkill#sideBar",
           "when": "viewItem == mdm-skill",
           "group": "inline@2"
         },
         {
-          "command": "mdm.deleteAgent",
+          "command": "_mdm.deleteAgent#sideBar",
           "when": "viewItem == mdm-agent",
           "group": "inline@1"
         },
         {
-          "command": "mdm.auditSkills",
+          "command": "_mdm.auditSkills#sideBar",
           "when": "viewItem == mdm-skill",
           "group": "context@1"
         },
         {
-          "command": "mdm.copyName",
+          "command": "_mdm.copyName#sideBar",
           "when": "viewItem == mdm-skill || viewItem == mdm-agent",
           "group": "context@2"
         },
         {
-          "command": "mdm.rulesLink",
+          "command": "_mdm.rulesLink#sideBar",
           "when": "viewItem == mdm-rule-missing",
           "group": "inline@1"
         },
         {
-          "command": "mdm.rulesUnlink",
+          "command": "_mdm.rulesUnlink#sideBar",
           "when": "viewItem == mdm-rule-linked",
           "group": "inline@1"
         }
@@ -251,7 +312,9 @@
     "vscode:prepublish": "bun run compile",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "lint": "eslint src --ext .ts",
+    "lint": "eslint src",
+    "format:check": "prettier --check .",
+    "format": "prettier --write .",
     "package": "vsce package --no-dependencies"
   },
   "devDependencies": {
@@ -261,6 +324,7 @@
     "@typescript-eslint/parser": "^8.59.2",
     "@vscode/vsce": "^3.9.1",
     "eslint": "^10.3.0",
+    "prettier": "^3.8.3",
     "typescript": "^6.0.3"
   }
 }

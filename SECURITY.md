@@ -15,6 +15,7 @@ We take security vulnerabilities seriously. Please follow responsible disclosure
 Use [GitHub Security Advisories](https://github.com/sethcarney/mdm-vscode/security/advisories/new) to create a private advisory — this is the preferred method as it keeps the report confidential and allows coordinated disclosure.
 
 Please include:
+
 - A description of the vulnerability and its potential impact
 - Steps to reproduce the issue
 - Any suggested mitigations or patches

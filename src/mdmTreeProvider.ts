@@ -24,6 +24,7 @@ export class MdmTreeItem extends vscode.TreeItem {
       resource?: MdmResourceType;
       isError?: boolean;
       command?: vscode.Command;
+      icon?: string;
     }
   ) {
     super(label, collapsibleState);
@@ -46,14 +47,11 @@ export class MdmTreeItem extends vscode.TreeItem {
       this.iconPath = new vscode.ThemeIcon(
         options.scope === "global" ? "globe" : "folder"
       );
-      if (resource === "agents" || resource === "skills") {
-        this.contextValue = `mdm-${resource}-scope-${options.scope ?? "project"}`;
-      }
       return;
     }
 
     if (options.kind === "action") {
-      this.iconPath = new vscode.ThemeIcon("cloud-download");
+      this.iconPath = new vscode.ThemeIcon(options.icon ?? "cloud-download");
       if (options.command) {
         this.command = options.command;
       }
@@ -141,64 +139,70 @@ export class MdmTreeProvider implements vscode.TreeDataProvider<MdmTreeItem> {
       return [errorItem("MDM CLI not found — check mdm.cliPath in settings")];
     }
 
-    let items: MdmItem[];
-    try {
-      items = await this.fetchItems();
-    } catch (err) {
-      return [errorItem(err instanceof Error ? err.message : String(err))];
-    }
-
-    if (element?.kind === "scope-header" && element.itemScope) {
-      return items
-        .filter((i) => i.scope === element.itemScope)
-        .map((item) => this.makeItemNode(item));
-    }
-
-    // Root level
-    const hasGlobal = items.some((i) => i.scope === "global");
-    const hasProject = items.some((i) => i.scope === "project");
-
-    if (!hasGlobal && !hasProject) {
-      // No skills at all — offer install if lock file is present
-      if (
-        this.resource === "skills" &&
-        (await this.client.hasSkillsLockFile())
-      ) {
-        return [installPromptItem()];
-      }
-      return [messageItem(`No ${this.resource} found`)];
-    }
-
-    const headers: MdmTreeItem[] = [];
-    if (hasGlobal) {
-      headers.push(
+    // Root level — always show both scope headers
+    if (!element) {
+      return [
         new MdmTreeItem("Global", vscode.TreeItemCollapsibleState.Expanded, {
           kind: "scope-header",
           scope: "global",
           resource: this.resource
-        })
-      );
-    }
-    if (hasProject) {
-      headers.push(
+        }),
         new MdmTreeItem("Project", vscode.TreeItemCollapsibleState.Expanded, {
           kind: "scope-header",
           scope: "project",
           resource: this.resource
         })
-      );
+      ];
     }
 
-    // Project skills missing but lock file exists — append install prompt below existing headers
-    if (
-      this.resource === "skills" &&
-      !hasProject &&
-      (await this.client.hasSkillsLockFile())
-    ) {
-      headers.push(installPromptItem());
+    // Scope header children
+    if (element.kind === "scope-header" && element.itemScope) {
+      let items: MdmItem[];
+      try {
+        items = await this.fetchItems();
+      } catch (err) {
+        return [errorItem(err instanceof Error ? err.message : String(err))];
+      }
+
+      const scopeItems = items
+        .filter((i) => i.scope === element.itemScope)
+        .map((item) => this.makeItemNode(item));
+
+      const children: MdmTreeItem[] = [
+        this.makeAddNode(element.itemScope),
+        ...scopeItems
+      ];
+
+      if (
+        this.resource === "skills" &&
+        element.itemScope === "project" &&
+        scopeItems.length === 0 &&
+        (await this.client.hasSkillsLockFile())
+      ) {
+        children.push(installPromptItem());
+      }
+
+      return children;
     }
 
-    return headers;
+    return [];
+  }
+
+  private makeAddNode(scope: MdmScope): MdmTreeItem {
+    const command =
+      this.resource === "skills"
+        ? "_mdm.findSkill#sideBar"
+        : "_mdm.addAgent#sideBar";
+    const noun = this.resource === "skills" ? "skill" : "agent";
+    return new MdmTreeItem(
+      `Add ${scope} ${noun}…`,
+      vscode.TreeItemCollapsibleState.None,
+      {
+        kind: "action",
+        icon: "add",
+        command: { command, title: "Add", arguments: [scope] }
+      }
+    );
   }
 
   private makeItemNode(item: MdmItem): MdmTreeItem {
@@ -374,11 +378,5 @@ function errorItem(message: string): MdmTreeItem {
   return new MdmTreeItem(message, vscode.TreeItemCollapsibleState.None, {
     kind: "message",
     isError: true
-  });
-}
-
-function messageItem(message: string): MdmTreeItem {
-  return new MdmTreeItem(message, vscode.TreeItemCollapsibleState.None, {
-    kind: "message"
   });
 }

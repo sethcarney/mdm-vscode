@@ -229,34 +229,19 @@
       ],
       "view/title": [
         {
-          "command": "_mdm.findSkill#sideBar",
-          "when": "view == mdmSkills",
-          "group": "navigation@1"
-        },
-        {
-          "command": "_mdm.addSkill#sideBar",
-          "when": "view == mdmSkills",
-          "group": "navigation@2"
-        },
-        {
           "command": "_mdm.updateAllSkills#sideBar",
           "when": "view == mdmSkills",
-          "group": "navigation@3"
+          "group": "navigation@1"
         },
         {
           "command": "_mdm.refreshSkills#sideBar",
           "when": "view == mdmSkills",
-          "group": "navigation@4"
-        },
-        {
-          "command": "_mdm.addAgent#sideBar",
-          "when": "view == mdmAgents",
-          "group": "navigation@1"
+          "group": "navigation@2"
         },
         {
           "command": "_mdm.refreshAgents#sideBar",
           "when": "view == mdmAgents",
-          "group": "navigation@2"
+          "group": "navigation@1"
         },
         {
           "command": "_mdm.rulesLinkAgent#sideBar",
@@ -271,16 +256,6 @@
       ],
       "view/item/context": [
         {
-          "command": "_mdm.findSkill#sideBar",
-          "when": "viewItem == mdm-skills-scope-global || viewItem == mdm-skills-scope-project",
-          "group": "inline@1"
-        },
-        {
-          "command": "_mdm.addSkill#sideBar",
-          "when": "viewItem == mdm-skills-scope-global || viewItem == mdm-skills-scope-project",
-          "group": "inline@2"
-        },
-        {
           "command": "_mdm.updateSkill#sideBar",
           "when": "viewItem == mdm-skill",
           "group": "inline@1"
@@ -289,11 +264,6 @@
           "command": "_mdm.deleteSkill#sideBar",
           "when": "viewItem == mdm-skill",
           "group": "inline@2"
-        },
-        {
-          "command": "_mdm.addAgent#sideBar",
-          "when": "viewItem == mdm-agents-scope-global || viewItem == mdm-agents-scope-project",
-          "group": "inline@1"
         },
         {
           "command": "_mdm.deleteAgent#sideBar",

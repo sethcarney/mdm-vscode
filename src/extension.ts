@@ -107,7 +107,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
     vscode.commands.registerCommand(
       "_mdm.addSkill#sideBar",
-      async (item?: MdmTreeItem) => {
+      async (scope?: MdmScope) => {
         const repo = await vscode.window.showInputBox({
           prompt: "GitHub repo, URL, or local path containing the skill(s)",
           placeHolder:
@@ -161,8 +161,8 @@ export function activate(context: vscode.ExtensionContext): void {
           // network failure — continue without pre-flight, let install-time audit handle it
         }
 
-        let scope: MdmScope | undefined = item?.itemScope;
-        if (!scope) {
+        let resolvedScope: MdmScope | undefined = scope;
+        if (!resolvedScope) {
           const scopePick = await vscode.window.showQuickPick(
             [
               {
@@ -181,13 +181,13 @@ export function activate(context: vscode.ExtensionContext): void {
           if (!scopePick) {
             return;
           }
-          scope = scopePick.scope;
+          resolvedScope = scopePick.scope;
         }
 
         const ok = await installSkillWithRetry(
           client,
           repo.trim(),
-          scope,
+          resolvedScope,
           repo.trim(),
           undefined,
           skipAudit
@@ -200,7 +200,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
     vscode.commands.registerCommand(
       "_mdm.findSkill#sideBar",
-      async (item?: MdmTreeItem) => {
+      async (scope?: MdmScope) => {
         const picked = await findSkillInteractive(client);
         if (!picked) {
           return;
@@ -268,8 +268,8 @@ export function activate(context: vscode.ExtensionContext): void {
           // network failure — continue without pre-flight, let install-time audit handle it
         }
 
-        let scope: MdmScope | undefined = item?.itemScope;
-        if (!scope) {
+        let resolvedScope: MdmScope | undefined = scope;
+        if (!resolvedScope) {
           const scopePick = await vscode.window.showQuickPick(
             [
               {
@@ -288,13 +288,13 @@ export function activate(context: vscode.ExtensionContext): void {
           if (!scopePick) {
             return;
           }
-          scope = scopePick.scope;
+          resolvedScope = scopePick.scope;
         }
 
         const ok = await installSkillWithRetry(
           client,
           source,
-          scope,
+          resolvedScope,
           label,
           skillName,
           skipAudit
@@ -484,11 +484,9 @@ export function activate(context: vscode.ExtensionContext): void {
 
     vscode.commands.registerCommand(
       "_mdm.addAgent#sideBar",
-      async (item?: MdmTreeItem) => {
-        let scope: MdmScope;
-        if (item?.itemScope) {
-          scope = item.itemScope;
-        } else {
+      async (scope?: MdmScope) => {
+        let resolvedScope: MdmScope | undefined = scope;
+        if (!resolvedScope) {
           const scopePick = await vscode.window.showQuickPick(
             [
               {
@@ -507,7 +505,7 @@ export function activate(context: vscode.ExtensionContext): void {
           if (!scopePick) {
             return;
           }
-          scope = scopePick.scope;
+          resolvedScope = scopePick.scope;
         }
 
         let available: {
@@ -522,7 +520,7 @@ export function activate(context: vscode.ExtensionContext): void {
           ]);
           const configuredNames = new Set(
             configured
-              .filter((a) => a.scope === scope)
+              .filter((a) => a.scope === resolvedScope)
               .map((a) => a.name.toLowerCase().replace(/\s+/g, "-"))
           );
           available = allAgents
@@ -560,7 +558,7 @@ export function activate(context: vscode.ExtensionContext): void {
               location: vscode.ProgressLocation.Notification,
               title: `Adding agent "${picked.label}"…`
             },
-            () => client.addAgent(picked.agentName, scope)
+            () => client.addAgent(picked.agentName, resolvedScope)
           );
           agentsProvider.refresh();
         } catch (err) {

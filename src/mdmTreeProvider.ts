@@ -307,7 +307,7 @@ export class MdmRulesTreeProvider implements vscode.TreeDataProvider<MdmRulesIte
     }
 
     const visible = entries.filter(
-      (e) => e.state === "linked" || e.state === "missing" || e.state === "real"
+      (e) => e.state === "linked" || e.state === "missing"
     );
 
     if (visible.length === 0) {

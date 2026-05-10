@@ -46,6 +46,9 @@ export class MdmTreeItem extends vscode.TreeItem {
       this.iconPath = new vscode.ThemeIcon(
         options.scope === "global" ? "globe" : "folder"
       );
+      if (resource === "agents") {
+        this.contextValue = `mdm-agents-scope-${options.scope ?? "project"}`;
+      }
       return;
     }
 
@@ -171,7 +174,8 @@ export class MdmTreeProvider implements vscode.TreeDataProvider<MdmTreeItem> {
       headers.push(
         new MdmTreeItem("Global", vscode.TreeItemCollapsibleState.Expanded, {
           kind: "scope-header",
-          scope: "global"
+          scope: "global",
+          resource: this.resource
         })
       );
     }
@@ -179,7 +183,8 @@ export class MdmTreeProvider implements vscode.TreeDataProvider<MdmTreeItem> {
       headers.push(
         new MdmTreeItem("Project", vscode.TreeItemCollapsibleState.Expanded, {
           kind: "scope-header",
-          scope: "project"
+          scope: "project",
+          resource: this.resource
         })
       );
     }

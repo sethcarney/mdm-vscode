@@ -281,6 +281,11 @@
           "group": "inline@2"
         },
         {
+          "command": "_mdm.addAgent#sideBar",
+          "when": "viewItem == mdm-agents-scope-global || viewItem == mdm-agents-scope-project",
+          "group": "inline@1"
+        },
+        {
           "command": "_mdm.deleteAgent#sideBar",
           "when": "viewItem == mdm-agent",
           "group": "inline@1"

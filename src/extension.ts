@@ -467,85 +467,94 @@ export function activate(context: vscode.ExtensionContext): void {
       }
     ),
 
-    vscode.commands.registerCommand("_mdm.addAgent#sideBar", async () => {
-      const scopePick = await vscode.window.showQuickPick(
-        [
-          {
-            label: "Project",
-            description: "Add to the current workspace",
-            scope: "project" as const
-          },
-          {
-            label: "Global",
-            description: "Add to your user-level agent list",
-            scope: "global" as const
+    vscode.commands.registerCommand(
+      "_mdm.addAgent#sideBar",
+      async (item?: MdmTreeItem) => {
+        let scope: MdmScope;
+        if (item?.itemScope) {
+          scope = item.itemScope;
+        } else {
+          const scopePick = await vscode.window.showQuickPick(
+            [
+              {
+                label: "Project",
+                description: "Add to the current workspace",
+                scope: "project" as const
+              },
+              {
+                label: "Global",
+                description: "Add to your user-level agent list",
+                scope: "global" as const
+              }
+            ],
+            { placeHolder: "Select scope for the new agent" }
+          );
+          if (!scopePick) {
+            return;
           }
-        ],
-        { placeHolder: "Select scope for the new agent" }
-      );
-      if (!scopePick) {
-        return;
-      }
+          scope = scopePick.scope;
+        }
 
-      let available: {
-        label: string;
-        description: string;
-        agentName: string;
-      }[];
-      try {
-        const [allAgents, configured] = await Promise.all([
-          client.listAvailableAgents(),
-          client.listItems("agents")
-        ]);
-        const configuredNames = new Set(
-          configured
-            .filter((a) => a.scope === scopePick.scope)
-            .map((a) => a.name.toLowerCase().replace(/\s+/g, "-"))
-        );
-        available = allAgents
-          .filter((a) => !configuredNames.has(a.name))
-          .map((a) => ({
-            label: a.displayName,
-            description: a.name + (a.installed ? "  ✓ installed" : ""),
-            agentName: a.name
-          }));
-      } catch (err) {
-        void vscode.window.showErrorMessage(
-          `Failed to fetch agents: ${err instanceof Error ? err.message : String(err)}`
-        );
-        return;
-      }
+        let available: {
+          label: string;
+          description: string;
+          agentName: string;
+        }[];
+        try {
+          const [allAgents, configured] = await Promise.all([
+            client.listAvailableAgents(),
+            client.listItems("agents")
+          ]);
+          const configuredNames = new Set(
+            configured
+              .filter((a) => a.scope === scope)
+              .map((a) => a.name.toLowerCase().replace(/\s+/g, "-"))
+          );
+          available = allAgents
+            .filter((a) => !configuredNames.has(a.name))
+            .map((a) => ({
+              label: a.displayName,
+              description: a.name + (a.installed ? "  ✓ installed" : ""),
+              agentName: a.name
+            }));
+        } catch (err) {
+          void vscode.window.showErrorMessage(
+            `Failed to fetch agents: ${err instanceof Error ? err.message : String(err)}`
+          );
+          return;
+        }
 
-      if (available.length === 0) {
-        void vscode.window.showInformationMessage(
-          "All known agents are already configured for this scope."
-        );
-        return;
-      }
+        if (available.length === 0) {
+          void vscode.window.showInformationMessage(
+            "All known agents are already configured for this scope."
+          );
+          return;
+        }
 
-      const picked = await vscode.window.showQuickPick(available, {
-        placeHolder: "Select an agent to add",
-        matchOnDescription: true
-      });
-      if (!picked) {
-        return;
-      }
+        const picked = await vscode.window.showQuickPick(available, {
+          placeHolder: "Select an agent to add",
+          matchOnDescription: true
+        });
+        if (!picked) {
+          return;
+        }
 
-      try {
-        await vscode.window.withProgress(
-          {
-            location: vscode.ProgressLocation.Notification,
-            title: `Adding agent "${picked.label}"…`
-          },
-          () => client.addAgent(picked.agentName, scopePick.scope)
-        );
-        agentsProvider.refresh();
-      } catch (err) {
-        void vscode.window.showErrorMessage(
-          `Failed to add agent: ${err instanceof Error ? err.message : String(err)}`
-        );
+        try {
+          await vscode.window.withProgress(
+            {
+              location: vscode.ProgressLocation.Notification,
+              title: `Adding agent "${picked.label}"…`
+            },
+            () => client.addAgent(picked.agentName, scope)
+          );
+          agentsProvider.refresh();
+        } catch (err) {
+          void vscode.window.showErrorMessage(
+            `Failed to add agent: ${err instanceof Error ? err.message : String(err)}`
+          );
+        }
       }
-    }),
+    ),
 
     vscode.commands.registerCommand(
       "_mdm.deleteAgent#sideBar",

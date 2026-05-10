@@ -271,6 +271,16 @@
       ],
       "view/item/context": [
         {
+          "command": "_mdm.findSkill#sideBar",
+          "when": "viewItem == mdm-skills-scope-global || viewItem == mdm-skills-scope-project",
+          "group": "inline@1"
+        },
+        {
+          "command": "_mdm.addSkill#sideBar",
+          "when": "viewItem == mdm-skills-scope-global || viewItem == mdm-skills-scope-project",
+          "group": "inline@2"
+        },
+        {
           "command": "_mdm.updateSkill#sideBar",
           "when": "viewItem == mdm-skill",
           "group": "inline@1"

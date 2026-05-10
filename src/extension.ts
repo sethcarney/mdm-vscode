@@ -105,7 +105,7 @@ export function activate(context: vscode.ExtensionContext): void {
       }
     ),
 
-    vscode.commands.registerCommand("_mdm.addSkill#sideBar", async () => {
+    vscode.commands.registerCommand("_mdm.addSkill#sideBar", async (item?: MdmTreeItem) => {
       const repo = await vscode.window.showInputBox({
         prompt: "GitHub repo, URL, or local path containing the skill(s)",
         placeHolder:
@@ -158,29 +158,33 @@ export function activate(context: vscode.ExtensionContext): void {
         // network failure — continue without pre-flight, let install-time audit handle it
       }
 
-      const scopePick = await vscode.window.showQuickPick(
-        [
-          {
-            label: "Project",
-            description: "Install into the current workspace",
-            scope: "project" as const
-          },
-          {
-            label: "Global",
-            description: "Install at the user level",
-            scope: "global" as const
-          }
-        ],
-        { placeHolder: "Select install scope" }
-      );
-      if (!scopePick) {
-        return;
+      let scope: MdmScope | undefined = item?.itemScope;
+      if (!scope) {
+        const scopePick = await vscode.window.showQuickPick(
+          [
+            {
+              label: "Project",
+              description: "Install into the current workspace",
+              scope: "project" as const
+            },
+            {
+              label: "Global",
+              description: "Install at the user level",
+              scope: "global" as const
+            }
+          ],
+          { placeHolder: "Select install scope" }
+        );
+        if (!scopePick) {
+          return;
+        }
+        scope = scopePick.scope;
       }
 
       const ok = await installSkillWithRetry(
         client,
         repo.trim(),
-        scopePick.scope,
+        scope,
         repo.trim(),
         undefined,
         skipAudit
@@ -190,7 +194,7 @@ export function activate(context: vscode.ExtensionContext): void {
       }
     }),
 
-    vscode.commands.registerCommand("_mdm.findSkill#sideBar", async () => {
+    vscode.commands.registerCommand("_mdm.findSkill#sideBar", async (item?: MdmTreeItem) => {
       const picked = await findSkillInteractive(client);
       if (!picked) {
         return;
@@ -258,29 +262,33 @@ export function activate(context: vscode.ExtensionContext): void {
         // network failure — continue without pre-flight, let install-time audit handle it
       }
 
-      const scopePick = await vscode.window.showQuickPick(
-        [
-          {
-            label: "Project",
-            description: "Install into the current workspace",
-            scope: "project" as const
-          },
-          {
-            label: "Global",
-            description: "Install at the user level",
-            scope: "global" as const
-          }
-        ],
-        { placeHolder: "Select install scope" }
-      );
-      if (!scopePick) {
-        return;
+      let scope: MdmScope | undefined = item?.itemScope;
+      if (!scope) {
+        const scopePick = await vscode.window.showQuickPick(
+          [
+            {
+              label: "Project",
+              description: "Install into the current workspace",
+              scope: "project" as const
+            },
+            {
+              label: "Global",
+              description: "Install at the user level",
+              scope: "global" as const
+            }
+          ],
+          { placeHolder: "Select install scope" }
+        );
+        if (!scopePick) {
+          return;
+        }
+        scope = scopePick.scope;
       }
 
       const ok = await installSkillWithRetry(
         client,
         source,
-        scopePick.scope,
+        scope,
         label,
         skillName,
         skipAudit

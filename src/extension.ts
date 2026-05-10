@@ -694,7 +694,7 @@ const LOCAL_PATH_ITEM: SkillPickItem = {
 
 const ENTER_URL_ITEM: SkillPickItem = {
   label: "$(repo) Enter repo URL or path…",
-  description: "owner/repo  or  https://…  or  ./path",
+  description: "owner/repo  or  https://…  ",
   source: "",
   skillName: "",
   urlAction: true,
@@ -709,7 +709,7 @@ function findSkillInteractive(
     qp.placeholder = "Search the skills registry (e.g. typescript, git, react)";
     qp.matchOnDescription = true;
     qp.matchOnDetail = true;
-    qp.items = [LOCAL_PATH_ITEM];
+    qp.items = [ENTER_URL_ITEM, LOCAL_PATH_ITEM];
 
     let debounceTimer: ReturnType<typeof setTimeout> | undefined;
     let settled = false;

@@ -41,13 +41,13 @@ export function activate(context: vscode.ExtensionContext): void {
       showCollapseAll: true
     }),
 
-    vscode.commands.registerCommand("mdm.refreshSkills", () =>
+    vscode.commands.registerCommand("_mdm.refreshSkills#sideBar", () =>
       skillsProvider.refresh()
     ),
-    vscode.commands.registerCommand("mdm.refreshAgents", () =>
+    vscode.commands.registerCommand("_mdm.refreshAgents#sideBar", () =>
       agentsProvider.refresh()
     ),
-    vscode.commands.registerCommand("mdm.refreshRules", () =>
+    vscode.commands.registerCommand("_mdm.refreshRules#sideBar", () =>
       rulesProvider.refresh()
     ),
     vscode.commands.registerCommand("mdm.refreshAll", () => {
@@ -93,7 +93,7 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
 
     vscode.commands.registerCommand(
-      "mdm.copyName",
+      "_mdm.copyName#sideBar",
       async (item: MdmTreeItem) => {
         const label =
           typeof item.label === "string"
@@ -104,7 +104,7 @@ export function activate(context: vscode.ExtensionContext): void {
       }
     ),
 
-    vscode.commands.registerCommand("mdm.addSkill", async () => {
+    vscode.commands.registerCommand("_mdm.addSkill#sideBar", async () => {
       const repo = await vscode.window.showInputBox({
         prompt: "GitHub repo, URL, or local path containing the skill(s)",
         placeHolder:
@@ -189,7 +189,7 @@ export function activate(context: vscode.ExtensionContext): void {
       }
     }),
 
-    vscode.commands.registerCommand("mdm.findSkill", async () => {
+    vscode.commands.registerCommand("_mdm.findSkill#sideBar", async () => {
       const picked = await findSkillInteractive(client);
       if (!picked) {
         return;
@@ -289,7 +289,7 @@ export function activate(context: vscode.ExtensionContext): void {
       }
     }),
 
-    vscode.commands.registerCommand("mdm.updateAllSkills", async () => {
+    vscode.commands.registerCommand("_mdm.updateAllSkills#sideBar", async () => {
       const scopePick = await vscode.window.showQuickPick(
         [
           {
@@ -330,7 +330,7 @@ export function activate(context: vscode.ExtensionContext): void {
       }
     }),
 
-    vscode.commands.registerCommand("mdm.auditSkills", async () => {
+    vscode.commands.registerCommand("_mdm.auditSkills#sideBar", async () => {
       const scopePick = await vscode.window.showQuickPick(
         [
           {
@@ -409,7 +409,7 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
 
     vscode.commands.registerCommand(
-      "mdm.deleteSkill",
+      "_mdm.deleteSkill#sideBar",
       async (item: MdmTreeItem) => {
         const name = item.mdmItem?.name;
         const scope = item.mdmItem?.scope ?? "project";
@@ -438,7 +438,7 @@ export function activate(context: vscode.ExtensionContext): void {
     ),
 
     vscode.commands.registerCommand(
-      "mdm.updateSkill",
+      "_mdm.updateSkill#sideBar",
       async (item: MdmTreeItem) => {
         const name = item.mdmItem?.name;
         const scope = item.mdmItem?.scope ?? "project";
@@ -463,7 +463,7 @@ export function activate(context: vscode.ExtensionContext): void {
       }
     ),
 
-    vscode.commands.registerCommand("mdm.addAgent", async () => {
+    vscode.commands.registerCommand("_mdm.addAgent#sideBar", async () => {
       const scopePick = await vscode.window.showQuickPick(
         [
           {
@@ -546,7 +546,7 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
 
     vscode.commands.registerCommand(
-      "mdm.deleteAgent",
+      "_mdm.deleteAgent#sideBar",
       async (item: MdmTreeItem) => {
         const name = item.mdmItem?.name;
         const scope = item.mdmItem?.scope ?? "project";
@@ -573,7 +573,7 @@ export function activate(context: vscode.ExtensionContext): void {
       }
     ),
 
-    vscode.commands.registerCommand("mdm.rulesLinkAgent", async () => {
+    vscode.commands.registerCommand("_mdm.rulesLinkAgent#sideBar", async () => {
       let entries: import("./mdmClient").RulesEntry[];
       try {
         entries = await client.rulesStatus();
@@ -625,7 +625,7 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
 
     vscode.commands.registerCommand(
-      "mdm.rulesLink",
+      "_mdm.rulesLink#sideBar",
       async (item: MdmRulesItem) => {
         const entry = item.entry;
         if (!entry) {
@@ -653,7 +653,7 @@ export function activate(context: vscode.ExtensionContext): void {
     ),
 
     vscode.commands.registerCommand(
-      "mdm.rulesUnlink",
+      "_mdm.rulesUnlink#sideBar",
       async (item: MdmRulesItem) => {
         const entry = item.entry;
         if (!entry) {

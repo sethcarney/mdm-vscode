@@ -113,6 +113,13 @@ export class MdmTreeProvider implements vscode.TreeDataProvider<MdmTreeItem> {
     }, 100);
   }
 
+  dispose(): void {
+    if (this._refreshTimer !== undefined) {
+      clearTimeout(this._refreshTimer);
+    }
+    this._onDidChangeTreeData.dispose();
+  }
+
   getTreeItem(element: MdmTreeItem): vscode.TreeItem {
     return element;
   }
@@ -276,6 +283,13 @@ export class MdmRulesTreeProvider implements vscode.TreeDataProvider<MdmRulesIte
       this._statusPromise = undefined;
       this._onDidChangeTreeData.fire();
     }, 100);
+  }
+
+  dispose(): void {
+    if (this._refreshTimer !== undefined) {
+      clearTimeout(this._refreshTimer);
+    }
+    this._onDidChangeTreeData.dispose();
   }
 
   getTreeItem(element: MdmRulesItem): vscode.TreeItem {

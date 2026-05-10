@@ -16,6 +16,7 @@ export function activate(context: vscode.ExtensionContext): void {
   const skillsProvider = new MdmTreeProvider(client, "skills");
   const agentsProvider = new MdmTreeProvider(client, "agents");
   const rulesProvider = new MdmRulesTreeProvider(client);
+  context.subscriptions.push(skillsProvider, agentsProvider, rulesProvider);
 
   const doctorStatusBar = vscode.window.createStatusBarItem(
     vscode.StatusBarAlignment.Right,
@@ -472,12 +473,12 @@ export function activate(context: vscode.ExtensionContext): void {
           {
             label: "Project",
             description: "Add to the current workspace",
-            global: false
+            scope: "project" as const
           },
           {
             label: "Global",
             description: "Add to your user-level agent list",
-            global: true
+            scope: "global" as const
           }
         ],
         { placeHolder: "Select scope for the new agent" }
@@ -498,9 +499,7 @@ export function activate(context: vscode.ExtensionContext): void {
         ]);
         const configuredNames = new Set(
           configured
-            .filter(
-              (a) => a.scope === (scopePick.global ? "global" : "project")
-            )
+            .filter((a) => a.scope === scopePick.scope)
             .map((a) => a.name.toLowerCase().replace(/\s+/g, "-"))
         );
         available = allAgents
@@ -538,7 +537,7 @@ export function activate(context: vscode.ExtensionContext): void {
             location: vscode.ProgressLocation.Notification,
             title: `Adding agent "${picked.label}"…`
           },
-          () => client.addAgent(picked.agentName, scopePick.global)
+          () => client.addAgent(picked.agentName, scopePick.scope)
         );
         agentsProvider.refresh();
       } catch (err) {
@@ -566,7 +565,7 @@ export function activate(context: vscode.ExtensionContext): void {
         }
         try {
           const slug = name.toLowerCase().replace(/\s+/g, "-");
-          await client.removeAgent(slug, scope === "global");
+          await client.removeAgent(slug, scope);
           agentsProvider.refresh();
         } catch (err) {
           void vscode.window.showErrorMessage(
@@ -705,29 +704,34 @@ export function activate(context: vscode.ExtensionContext): void {
 }
 
 function checkCliAndWarn(client: MdmClient): void {
-  void client.checkInstalled().then((installed) => {
-    if (!installed) {
-      void vscode.window
-        .showErrorMessage(
-          "MDM CLI not found. Install it and make sure it is in your PATH, or set mdm.cliPath.",
-          "Configure Path",
-          "Dismiss"
-        )
-        .then((action) => {
-          if (action === "Configure Path") {
-            void vscode.commands.executeCommand(
-              "workbench.action.openSettings",
-              "mdm.cliPath"
-            );
-          }
-        });
-    }
-  });
+  void client
+    .checkInstalled()
+    .then((installed) => {
+      if (!installed) {
+        void vscode.window
+          .showErrorMessage(
+            "MDM CLI not found. Install it and make sure it is in your PATH, or set mdm.cliPath.",
+            "Configure Path",
+            "Dismiss"
+          )
+          .then((action) => {
+            if (action === "Configure Path") {
+              void vscode.commands.executeCommand(
+                "workbench.action.openSettings",
+                "mdm.cliPath"
+              );
+            }
+          });
+      }
+    })
+    .catch((err) => {
+      void vscode.window.showErrorMessage(
+        `MDM: error checking CLI: ${err instanceof Error ? err.message : String(err)}`
+      );
+    });
 }
 
-export function deactivate(): void {
-  // nothing to clean up
-}
+export function deactivate(): void {}
 
 interface SkillPickItem extends vscode.QuickPickItem {
   source: string;
@@ -785,7 +789,7 @@ function findSkillInteractive(
         void (async () => {
           try {
             const found = await client.findSkills(query);
-            if (query !== qp.value.trim()) {
+            if (settled || query !== qp.value.trim()) {
               return;
             }
             qp.items = [
@@ -802,7 +806,7 @@ function findSkillInteractive(
           } catch {
             // ignore search errors mid-typing
           } finally {
-            if (query === qp.value.trim()) {
+            if (!settled && query === qp.value.trim()) {
               qp.busy = false;
             }
           }
@@ -890,9 +894,7 @@ async function installSkillWithRetry(
       return retry({ allowHiddenChars: true });
     }
 
-    void vscode.window.showErrorMessage(
-      `Failed to install skill: ${err instanceof Error ? err.message : String(err)}`
-    );
+    void vscode.window.showErrorMessage(`Failed to install skill: ${output}`);
     return false;
   }
 }

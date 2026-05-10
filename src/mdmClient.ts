@@ -135,9 +135,9 @@ export class MdmClient {
     });
   }
 
-  async removeAgent(name: string, global: boolean): Promise<void> {
+  async removeAgent(name: string, scope: MdmScope): Promise<void> {
     const args = ["agents", "remove", name, "-y"];
-    if (global) {
+    if (scope === "global") {
       args.push("--global");
     }
     await execFileAsync(this.cliPath, args, {
@@ -146,9 +146,9 @@ export class MdmClient {
     });
   }
 
-  async addAgent(name: string, global: boolean): Promise<void> {
+  async addAgent(name: string, scope: MdmScope): Promise<void> {
     const args = ["agents", "add", name];
-    if (global) {
+    if (scope === "global") {
       args.push("--global");
     }
     await execFileAsync(this.cliPath, args, {
@@ -163,11 +163,7 @@ export class MdmClient {
       ["agents", "list", "--available", "--json"],
       { timeout: 10_000, cwd: this.workspaceRoot }
     );
-    const text = stdout.trim();
-    if (!text) {
-      return [];
-    }
-    return JSON.parse(text) as KnownAgent[];
+    return assertJsonArray(stdout, isKnownAgent, "agents list --available");
   }
 
   async addSkill(
@@ -206,10 +202,8 @@ export class MdmClient {
       args.push("--skill", skillName);
     }
     args.push("--json");
-    const parse = (text: string): AuditResult[] => {
-      const trimmed = text.trim();
-      return trimmed ? (JSON.parse(trimmed) as AuditResult[]) : [];
-    };
+    const parse = (text: string): AuditResult[] =>
+      assertJsonArray(text, isAuditResult, "skills audit --source");
     try {
       const { stdout } = await execFileAsync(this.cliPath, args, {
         timeout: 15_000,
@@ -231,11 +225,7 @@ export class MdmClient {
       ["skills", "find", query, "--json"],
       { timeout: 15_000, cwd: this.workspaceRoot }
     );
-    const text = stdout.trim();
-    if (!text) {
-      return [];
-    }
-    return JSON.parse(text) as FindSkillResult[];
+    return assertJsonArray(stdout, isFindSkillResult, "skills find");
   }
 
   async auditSkills(scope?: MdmScope): Promise<AuditResult[]> {
@@ -250,11 +240,7 @@ export class MdmClient {
       timeout: 30_000,
       cwd: this.workspaceRoot
     });
-    const text = stdout.trim();
-    if (!text) {
-      return [];
-    }
-    return JSON.parse(text) as AuditResult[];
+    return assertJsonArray(stdout, isAuditResult, "skills audit");
   }
 
   async updateAllSkills(scope?: MdmScope): Promise<void> {
@@ -298,11 +284,7 @@ export class MdmClient {
       ["rules", "status", "--json"],
       { timeout: 10_000, cwd: this.workspaceRoot }
     );
-    const text = stdout.trim();
-    if (!text) {
-      return [];
-    }
-    return JSON.parse(text) as RulesEntry[];
+    return assertJsonArray(stdout, isRulesEntry, "rules status");
   }
 
   async rulesLink(agent: string): Promise<void> {
@@ -351,12 +333,11 @@ export class MdmClient {
       }
       try {
         const { stdout } = await execFileAsync(this.cliPath, args, opts);
-        const text = stdout.trim();
-        return text ? (JSON.parse(text) as AgentJson[]) : [];
+        return assertJsonArray(stdout, isAgentJson, "agents list");
       } catch (err) {
         const stdout = (err as Record<string, unknown>)["stdout"];
         if (typeof stdout === "string" && stdout.trim()) {
-          return JSON.parse(stdout.trim()) as AgentJson[];
+          return assertJsonArray(stdout, isAgentJson, "agents list");
         }
         return [];
       }
@@ -391,6 +372,67 @@ export class MdmClient {
 
 function stripAnsi(text: string): string {
   return text.replace(/\x1B\[[0-9;]*m/g, "");
+}
+
+function assertJsonArray<T>(
+  text: string,
+  guard: (v: unknown) => v is T,
+  context: string
+): T[] {
+  const trimmed = text.trim();
+  if (!trimmed) {
+    return [];
+  }
+  const data: unknown = JSON.parse(trimmed);
+  if (!Array.isArray(data)) {
+    throw new Error(`${context}: expected JSON array from CLI`);
+  }
+  for (let i = 0; i < data.length; i++) {
+    if (!guard(data[i])) {
+      throw new Error(`${context}: unexpected shape at index ${i}`);
+    }
+  }
+  return data as T[];
+}
+
+function isKnownAgent(v: unknown): v is KnownAgent {
+  if (typeof v !== "object" || v === null) {
+    return false;
+  }
+  const o = v as Record<string, unknown>;
+  return typeof o["name"] === "string" && typeof o["displayName"] === "string";
+}
+
+function isFindSkillResult(v: unknown): v is FindSkillResult {
+  if (typeof v !== "object" || v === null) {
+    return false;
+  }
+  const o = v as Record<string, unknown>;
+  return typeof o["name"] === "string" && typeof o["source"] === "string";
+}
+
+function isAuditResult(v: unknown): v is AuditResult {
+  if (typeof v !== "object" || v === null) {
+    return false;
+  }
+  const o = v as Record<string, unknown>;
+  return typeof o["name"] === "string" && typeof o["scope"] === "string";
+}
+
+function isRulesEntry(v: unknown): v is RulesEntry {
+  if (typeof v !== "object" || v === null) {
+    return false;
+  }
+  const o = v as Record<string, unknown>;
+  return typeof o["file"] === "string" && Array.isArray(o["agents"]);
+}
+
+function isAgentJson(v: unknown): v is AgentJson {
+  if (typeof v !== "object" || v === null) {
+    return false;
+  }
+  const o = v as Record<string, unknown>;
+  return typeof o["name"] === "string" && typeof o["displayName"] === "string";
 }
 
 function parseSkillsJson(raw: string): MdmItem[] {

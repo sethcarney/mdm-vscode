@@ -82,7 +82,7 @@
       },
       {
         "command": "mdm.refreshAll",
-        "title": "MDM: Refresh All Views",
+        "title": "Refresh All Views",
         "category": "MDM",
         "icon": "$(refresh)"
       },
@@ -94,7 +94,7 @@
       {
         "command": "mdm.doctor",
         "category": "MDM",
-        "title": "MDM Doctor",
+        "title": "Doctor",
         "icon": "$(pulse)"
       },
       {
@@ -220,19 +220,29 @@
       ],
       "view/title": [
         {
-          "command": "_mdm.updateAllSkills#sideBar",
+          "command": "_mdm.findSkill#sideBar",
           "when": "view == mdmSkills",
           "group": "navigation@1"
         },
         {
-          "command": "_mdm.refreshSkills#sideBar",
+          "command": "_mdm.updateAllSkills#sideBar",
           "when": "view == mdmSkills",
           "group": "navigation@2"
         },
         {
-          "command": "_mdm.refreshAgents#sideBar",
+          "command": "_mdm.refreshSkills#sideBar",
+          "when": "view == mdmSkills",
+          "group": "navigation@3"
+        },
+        {
+          "command": "_mdm.addAgent#sideBar",
           "when": "view == mdmAgents",
           "group": "navigation@1"
+        },
+        {
+          "command": "_mdm.refreshAgents#sideBar",
+          "when": "view == mdmAgents",
+          "group": "navigation@2"
         },
         {
           "command": "_mdm.rulesLinkAgent#sideBar",

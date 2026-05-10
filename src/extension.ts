@@ -105,198 +105,205 @@ export function activate(context: vscode.ExtensionContext): void {
       }
     ),
 
-    vscode.commands.registerCommand("_mdm.addSkill#sideBar", async (item?: MdmTreeItem) => {
-      const repo = await vscode.window.showInputBox({
-        prompt: "GitHub repo, URL, or local path containing the skill(s)",
-        placeHolder:
-          "owner/repo  or  https://github.com/owner/repo  or  ./path/to/skill",
-        validateInput: (v) => (v.trim() ? undefined : "Repository is required")
-      });
-      if (!repo) {
-        return;
-      }
-
-      // Pre-flight audit — runs before scope picker so user decides on security first
-      let skipAudit = false;
-      try {
-        const auditResults = await vscode.window.withProgress(
-          {
-            location: vscode.ProgressLocation.Notification,
-            title: "Checking security…"
-          },
-          () => client.preInstallAudit(repo.trim())
-        );
-        const issues = auditResults.flatMap((r) =>
-          (r.audits ?? []).filter(
-            (a) => a.status === "warn" || a.status === "fail"
-          )
-        );
-        if (issues.length > 0) {
-          const skillId = auditResults[0]?.skillId;
-          const skillsShUrl = skillId
-            ? `https://skills.sh/${skillId}`
-            : undefined;
-          const buttons: string[] = ["Install Anyway"];
-          if (skillsShUrl) {
-            buttons.push("View on skills.sh");
-          }
-          const answer = await vscode.window.showWarningMessage(
-            `Security findings detected in "${repo.trim()}" (${issues.length} issue${issues.length > 1 ? "s" : ""}).`,
-            { modal: true },
-            ...buttons
-          );
-          if (answer === "View on skills.sh" && skillsShUrl) {
-            void vscode.env.openExternal(vscode.Uri.parse(skillsShUrl));
-            return;
-          }
-          if (answer !== "Install Anyway") {
-            return;
-          }
-          skipAudit = true;
-        }
-      } catch {
-        // network failure — continue without pre-flight, let install-time audit handle it
-      }
-
-      let scope: MdmScope | undefined = item?.itemScope;
-      if (!scope) {
-        const scopePick = await vscode.window.showQuickPick(
-          [
-            {
-              label: "Project",
-              description: "Install into the current workspace",
-              scope: "project" as const
-            },
-            {
-              label: "Global",
-              description: "Install at the user level",
-              scope: "global" as const
-            }
-          ],
-          { placeHolder: "Select install scope" }
-        );
-        if (!scopePick) {
-          return;
-        }
-        scope = scopePick.scope;
-      }
-
-      const ok = await installSkillWithRetry(
-        client,
-        repo.trim(),
-        scope,
-        repo.trim(),
-        undefined,
-        skipAudit
-      );
-      if (ok) {
-        skillsProvider.refresh();
-      }
-    }),
-
-    vscode.commands.registerCommand("_mdm.findSkill#sideBar", async (item?: MdmTreeItem) => {
-      const picked = await findSkillInteractive(client);
-      if (!picked) {
-        return;
-      }
-
-      let source = picked.source;
-      let label = picked.label;
-      let skillName: string | undefined = picked.skillName || undefined;
-
-      if (picked.localAction) {
-        const uris = await vscode.window.showOpenDialog({
-          canSelectFiles: false,
-          canSelectFolders: true,
-          canSelectMany: false,
-          openLabel: "Select Skill Directory",
-          title: "Select the skill directory (the one containing SKILL.md)"
+    vscode.commands.registerCommand(
+      "_mdm.addSkill#sideBar",
+      async (item?: MdmTreeItem) => {
+        const repo = await vscode.window.showInputBox({
+          prompt: "GitHub repo, URL, or local path containing the skill(s)",
+          placeHolder:
+            "owner/repo  or  https://github.com/owner/repo  or  ./path/to/skill",
+          validateInput: (v) =>
+            v.trim() ? undefined : "Repository is required"
         });
-        if (!uris || uris.length === 0) {
+        if (!repo) {
           return;
         }
-        source = uris[0].fsPath;
-        label = path.basename(source);
-        skillName = undefined;
-      }
 
-      // Pre-flight audit — runs before scope picker so user decides on security first
-      let skipAudit = false;
-      try {
-        const auditResults = await vscode.window.withProgress(
-          {
-            location: vscode.ProgressLocation.Notification,
-            title: `Checking security for "${label}"…`
-          },
-          () => client.preInstallAudit(source, skillName)
-        );
-        const issues = auditResults.flatMap((r) =>
-          (r.audits ?? []).filter(
-            (a) => a.status === "warn" || a.status === "fail"
-          )
-        );
-        if (issues.length > 0) {
-          const skillId = auditResults[0]?.skillId;
-          const skillsShUrl = skillId
-            ? `https://skills.sh/${skillId}`
-            : undefined;
-          const buttons: string[] = ["Install Anyway"];
-          if (skillsShUrl) {
-            buttons.push("View on skills.sh");
-          }
-          const answer = await vscode.window.showWarningMessage(
-            `Security findings detected in "${label}" (${issues.length} issue${issues.length > 1 ? "s" : ""}).`,
-            { modal: true },
-            ...buttons
-          );
-          if (answer === "View on skills.sh" && skillsShUrl) {
-            void vscode.env.openExternal(vscode.Uri.parse(skillsShUrl));
-            return;
-          }
-          if (answer !== "Install Anyway") {
-            return;
-          }
-          skipAudit = true;
-        }
-      } catch {
-        // network failure — continue without pre-flight, let install-time audit handle it
-      }
-
-      let scope: MdmScope | undefined = item?.itemScope;
-      if (!scope) {
-        const scopePick = await vscode.window.showQuickPick(
-          [
+        // Pre-flight audit — runs before scope picker so user decides on security first
+        let skipAudit = false;
+        try {
+          const auditResults = await vscode.window.withProgress(
             {
-              label: "Project",
-              description: "Install into the current workspace",
-              scope: "project" as const
+              location: vscode.ProgressLocation.Notification,
+              title: "Checking security…"
             },
-            {
-              label: "Global",
-              description: "Install at the user level",
-              scope: "global" as const
+            () => client.preInstallAudit(repo.trim())
+          );
+          const issues = auditResults.flatMap((r) =>
+            (r.audits ?? []).filter(
+              (a) => a.status === "warn" || a.status === "fail"
+            )
+          );
+          if (issues.length > 0) {
+            const skillId = auditResults[0]?.skillId;
+            const skillsShUrl = skillId
+              ? `https://skills.sh/${skillId}`
+              : undefined;
+            const buttons: string[] = ["Install Anyway"];
+            if (skillsShUrl) {
+              buttons.push("View on skills.sh");
             }
-          ],
-          { placeHolder: "Select install scope" }
+            const answer = await vscode.window.showWarningMessage(
+              `Security findings detected in "${repo.trim()}" (${issues.length} issue${issues.length > 1 ? "s" : ""}).`,
+              { modal: true },
+              ...buttons
+            );
+            if (answer === "View on skills.sh" && skillsShUrl) {
+              void vscode.env.openExternal(vscode.Uri.parse(skillsShUrl));
+              return;
+            }
+            if (answer !== "Install Anyway") {
+              return;
+            }
+            skipAudit = true;
+          }
+        } catch {
+          // network failure — continue without pre-flight, let install-time audit handle it
+        }
+
+        let scope: MdmScope | undefined = item?.itemScope;
+        if (!scope) {
+          const scopePick = await vscode.window.showQuickPick(
+            [
+              {
+                label: "Project",
+                description: "Install into the current workspace",
+                scope: "project" as const
+              },
+              {
+                label: "Global",
+                description: "Install at the user level",
+                scope: "global" as const
+              }
+            ],
+            { placeHolder: "Select install scope" }
+          );
+          if (!scopePick) {
+            return;
+          }
+          scope = scopePick.scope;
+        }
+
+        const ok = await installSkillWithRetry(
+          client,
+          repo.trim(),
+          scope,
+          repo.trim(),
+          undefined,
+          skipAudit
         );
-        if (!scopePick) {
+        if (ok) {
+          skillsProvider.refresh();
+        }
+      }
+    ),
+
+    vscode.commands.registerCommand(
+      "_mdm.findSkill#sideBar",
+      async (item?: MdmTreeItem) => {
+        const picked = await findSkillInteractive(client);
+        if (!picked) {
           return;
         }
-        scope = scopePick.scope;
-      }
 
-      const ok = await installSkillWithRetry(
-        client,
-        source,
-        scope,
-        label,
-        skillName,
-        skipAudit
-      );
-      if (ok) {
-        skillsProvider.refresh();
+        let source = picked.source;
+        let label = picked.label;
+        let skillName: string | undefined = picked.skillName || undefined;
+
+        if (picked.localAction) {
+          const uris = await vscode.window.showOpenDialog({
+            canSelectFiles: false,
+            canSelectFolders: true,
+            canSelectMany: false,
+            openLabel: "Select Skill Directory",
+            title: "Select the skill directory (the one containing SKILL.md)"
+          });
+          if (!uris || uris.length === 0) {
+            return;
+          }
+          source = uris[0].fsPath;
+          label = path.basename(source);
+          skillName = undefined;
+        }
+
+        // Pre-flight audit — runs before scope picker so user decides on security first
+        let skipAudit = false;
+        try {
+          const auditResults = await vscode.window.withProgress(
+            {
+              location: vscode.ProgressLocation.Notification,
+              title: `Checking security for "${label}"…`
+            },
+            () => client.preInstallAudit(source, skillName)
+          );
+          const issues = auditResults.flatMap((r) =>
+            (r.audits ?? []).filter(
+              (a) => a.status === "warn" || a.status === "fail"
+            )
+          );
+          if (issues.length > 0) {
+            const skillId = auditResults[0]?.skillId;
+            const skillsShUrl = skillId
+              ? `https://skills.sh/${skillId}`
+              : undefined;
+            const buttons: string[] = ["Install Anyway"];
+            if (skillsShUrl) {
+              buttons.push("View on skills.sh");
+            }
+            const answer = await vscode.window.showWarningMessage(
+              `Security findings detected in "${label}" (${issues.length} issue${issues.length > 1 ? "s" : ""}).`,
+              { modal: true },
+              ...buttons
+            );
+            if (answer === "View on skills.sh" && skillsShUrl) {
+              void vscode.env.openExternal(vscode.Uri.parse(skillsShUrl));
+              return;
+            }
+            if (answer !== "Install Anyway") {
+              return;
+            }
+            skipAudit = true;
+          }
+        } catch {
+          // network failure — continue without pre-flight, let install-time audit handle it
+        }
+
+        let scope: MdmScope | undefined = item?.itemScope;
+        if (!scope) {
+          const scopePick = await vscode.window.showQuickPick(
+            [
+              {
+                label: "Project",
+                description: "Install into the current workspace",
+                scope: "project" as const
+              },
+              {
+                label: "Global",
+                description: "Install at the user level",
+                scope: "global" as const
+              }
+            ],
+            { placeHolder: "Select install scope" }
+          );
+          if (!scopePick) {
+            return;
+          }
+          scope = scopePick.scope;
+        }
+
+        const ok = await installSkillWithRetry(
+          client,
+          source,
+          scope,
+          label,
+          skillName,
+          skipAudit
+        );
+        if (ok) {
+          skillsProvider.refresh();
+        }
       }
-    }),
+    ),
 
     vscode.commands.registerCommand(
       "_mdm.updateAllSkills#sideBar",

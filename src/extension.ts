@@ -1,3 +1,4 @@
+import * as path from "path";
 import * as vscode from "vscode";
 import { MdmClient, MdmScope } from "./mdmClient";
 import {
@@ -199,16 +200,18 @@ export function activate(context: vscode.ExtensionContext): void {
       let skillName: string | undefined = picked.skillName || undefined;
 
       if (picked.localAction) {
-        const localPath = await vscode.window.showInputBox({
-          prompt: "Local path to the skill directory",
-          placeHolder: "./path/to/skill  or  /absolute/path",
-          validateInput: (v) => (v.trim() ? undefined : "Path is required")
+        const uris = await vscode.window.showOpenDialog({
+          canSelectFiles: false,
+          canSelectFolders: true,
+          canSelectMany: false,
+          openLabel: "Select Skill Directory",
+          title: "Select the skill directory (the one containing SKILL.md)"
         });
-        if (!localPath) {
+        if (!uris || uris.length === 0) {
           return;
         }
-        source = localPath.trim();
-        label = localPath.trim();
+        source = uris[0].fsPath;
+        label = path.basename(source);
         skillName = undefined;
       }
 

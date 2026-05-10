@@ -189,57 +189,27 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
 
     vscode.commands.registerCommand("mdm.findSkill", async () => {
-      const query = await vscode.window.showInputBox({
-        prompt: "Search the skills registry",
-        placeHolder: "e.g. typescript, git, react",
-        validateInput: (v) => (v.trim() ? undefined : "Enter a search term")
-      });
-      if (!query) {
-        return;
-      }
-
-      let results: {
-        label: string;
-        description: string;
-        detail?: string;
-        source: string;
-        skillName: string;
-      }[];
-      try {
-        const found = await vscode.window.withProgress(
-          {
-            location: vscode.ProgressLocation.Notification,
-            title: `Searching for "${query.trim()}"…`
-          },
-          () => client.findSkills(query.trim())
-        );
-        if (found.length === 0) {
-          void vscode.window.showInformationMessage(
-            `No skills found for "${query.trim()}".`
-          );
-          return;
-        }
-        results = found.map((r) => ({
-          label: r.name,
-          description: r.source + (r.stars ? `  ★${r.stars}` : ""),
-          detail: r.description || undefined,
-          source: r.source,
-          skillName: r.name
-        }));
-      } catch (err) {
-        void vscode.window.showErrorMessage(
-          `Search failed: ${err instanceof Error ? err.message : String(err)}`
-        );
-        return;
-      }
-
-      const picked = await vscode.window.showQuickPick(results, {
-        placeHolder: "Select a skill to install",
-        matchOnDescription: true,
-        matchOnDetail: true
-      });
+      const picked = await findSkillInteractive(client);
       if (!picked) {
         return;
+      }
+
+      let source = picked.source;
+      let label = picked.label;
+      let skillName: string | undefined = picked.skillName || undefined;
+
+      if (picked.localAction) {
+        const localPath = await vscode.window.showInputBox({
+          prompt: "Local path to the skill directory",
+          placeHolder: "./path/to/skill  or  /absolute/path",
+          validateInput: (v) => (v.trim() ? undefined : "Path is required")
+        });
+        if (!localPath) {
+          return;
+        }
+        source = localPath.trim();
+        label = localPath.trim();
+        skillName = undefined;
       }
 
       // Pre-flight audit — runs before scope picker so user decides on security first
@@ -248,9 +218,9 @@ export function activate(context: vscode.ExtensionContext): void {
         const auditResults = await vscode.window.withProgress(
           {
             location: vscode.ProgressLocation.Notification,
-            title: `Checking security for "${picked.label}"…`
+            title: `Checking security for "${label}"…`
           },
-          () => client.preInstallAudit(picked.source, picked.skillName)
+          () => client.preInstallAudit(source, skillName)
         );
         const issues = auditResults.flatMap((r) =>
           (r.audits ?? []).filter(
@@ -267,7 +237,7 @@ export function activate(context: vscode.ExtensionContext): void {
             buttons.push("View on skills.sh");
           }
           const answer = await vscode.window.showWarningMessage(
-            `Security findings detected in "${picked.label}" (${issues.length} issue${issues.length > 1 ? "s" : ""}).`,
+            `Security findings detected in "${label}" (${issues.length} issue${issues.length > 1 ? "s" : ""}).`,
             { modal: true },
             ...buttons
           );
@@ -305,10 +275,10 @@ export function activate(context: vscode.ExtensionContext): void {
 
       const ok = await installSkillWithRetry(
         client,
-        picked.source,
+        source,
         scopePick.scope,
-        picked.label,
-        picked.skillName,
+        label,
+        skillName,
         skipAudit
       );
       if (ok) {
@@ -751,6 +721,93 @@ function checkCliAndWarn(client: MdmClient): void {
 
 export function deactivate(): void {
   // nothing to clean up
+}
+
+interface SkillPickItem extends vscode.QuickPickItem {
+  source: string;
+  skillName: string;
+  localAction?: true;
+}
+
+const LOCAL_PATH_ITEM: SkillPickItem = {
+  label: "$(folder-opened) Install from local path…",
+  description: "Enter a path to a local skill directory",
+  source: "",
+  skillName: "",
+  localAction: true,
+  alwaysShow: true
+};
+
+function findSkillInteractive(
+  client: MdmClient
+): Promise<SkillPickItem | undefined> {
+  return new Promise((resolve) => {
+    const qp = vscode.window.createQuickPick<SkillPickItem>();
+    qp.placeholder = "Search the skills registry (e.g. typescript, git, react)";
+    qp.matchOnDescription = true;
+    qp.matchOnDetail = true;
+    qp.items = [LOCAL_PATH_ITEM];
+
+    let debounceTimer: ReturnType<typeof setTimeout> | undefined;
+    let settled = false;
+
+    const settle = (value: SkillPickItem | undefined) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      if (debounceTimer !== undefined) {
+        clearTimeout(debounceTimer);
+      }
+      qp.dispose();
+      resolve(value);
+    };
+
+    qp.onDidChangeValue((value) => {
+      const query = value.trim();
+      if (debounceTimer !== undefined) {
+        clearTimeout(debounceTimer);
+      }
+      if (!query) {
+        qp.items = [LOCAL_PATH_ITEM];
+        qp.busy = false;
+        return;
+      }
+      qp.busy = true;
+      debounceTimer = setTimeout(() => {
+        debounceTimer = undefined;
+        void (async () => {
+          try {
+            const found = await client.findSkills(query);
+            if (query !== qp.value.trim()) {
+              return;
+            }
+            qp.items = [
+              ...found.map((r) => ({
+                label: r.name,
+                description: r.source + (r.stars ? `  ★${r.stars}` : ""),
+                detail: r.description || undefined,
+                source: r.source,
+                skillName: r.name,
+                alwaysShow: true
+              })),
+              LOCAL_PATH_ITEM
+            ];
+          } catch {
+            // ignore search errors mid-typing
+          } finally {
+            if (query === qp.value.trim()) {
+              qp.busy = false;
+            }
+          }
+        })();
+      }, 400);
+    });
+
+    qp.onDidAccept(() => settle(qp.selectedItems[0]));
+    qp.onDidHide(() => settle(undefined));
+    qp.show();
+  });
 }
 
 function extractErrOutput(err: unknown): string {

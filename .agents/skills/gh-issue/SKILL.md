@@ -27,17 +27,17 @@ If either fails, stop and tell the user what to fix before continuing.
 
 Before drafting the issue, collect the following. Ask for anything missing — do not invent it.
 
-| Field | What to ask |
-|---|---|
-| **Type** | Bug, feature, chore, or docs? |
-| **Title** | One-line summary (imperative mood: "Add …", "Fix …", "Remove …") |
-| **Problem / motivation** | What's broken or missing, and why does it matter? |
-| **Acceptance criteria** | What must be true for this issue to be closed? |
-| **Out of scope** | What related things will *not* be addressed? (optional but valuable) |
-| **Technical notes** | Known constraints, relevant files, dependencies (optional) |
-| **Labels** | Defaults suggested below; ask user to confirm or override |
-| **Assignee** | Leave blank unless user specifies |
-| **Milestone** | Leave blank unless one exists (`gh milestone list`) |
+| Field                    | What to ask                                                          |
+| ------------------------ | -------------------------------------------------------------------- |
+| **Type**                 | Bug, feature, chore, or docs?                                        |
+| **Title**                | One-line summary (imperative mood: "Add …", "Fix …", "Remove …")     |
+| **Problem / motivation** | What's broken or missing, and why does it matter?                    |
+| **Acceptance criteria**  | What must be true for this issue to be closed?                       |
+| **Out of scope**         | What related things will _not_ be addressed? (optional but valuable) |
+| **Technical notes**      | Known constraints, relevant files, dependencies (optional)           |
+| **Labels**               | Defaults suggested below; ask user to confirm or override            |
+| **Assignee**             | Leave blank unless user specifies                                    |
+| **Milestone**            | Leave blank unless one exists (`gh milestone list`)                  |
 
 ---
 

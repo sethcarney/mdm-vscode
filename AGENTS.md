@@ -21,6 +21,7 @@ There are no automated tests — manual testing is done via the Extension Develo
 The extension is three TypeScript files under `src/`:
 
 **`mdmClient.ts`** — all CLI interaction. Shells out to the `mdm` binary (path from `mdm.cliPath` setting, default `"mdm"`). Every `execAsync` call passes `cwd: workspaceRoot` (first open workspace folder) so that `mdm` resolves project-scope items correctly. Key methods:
+
 - `listItems('skills')` → `mdm skills list --json` → parses JSON with capitalized keys (`Name`, `Description`, `Scope`, `Path`). Sets `filePath` to `Path/SKILL.md` for click-to-open.
 - `listItems('agents')` → two calls: `mdm agents list --json --global` and `mdm agents list --json` (project; exits non-zero when empty, caught). Parses JSON. Global agents get `filePath` → `~/.agents/AGENTS.md`; project agents → `{workspaceRoot}/AGENTS.md`.
 - `removeSkill` / `updateSkill` / `removeAgent` — thin wrappers with `-y` to skip CLI prompts.

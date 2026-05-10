@@ -41,13 +41,13 @@ gh repo view         # must be inside a git repo with a GitHub remote
 
 Ask the user for:
 
-| Question | Why it matters |
-|---|---|
-| What is the end-user outcome when this project is done? | Keeps issues outcome-focused, not task-focused |
-| What is explicitly out of scope for this project? | Prevents unbounded scope during decomposition |
-| Is there a target release date or sprint? | Informs milestone due date |
-| Are there known dependencies or constraints? | Surfaces blockers early |
-| Who is the primary audience — users, developers, or operators? | Shapes how acceptance criteria are written |
+| Question                                                       | Why it matters                                 |
+| -------------------------------------------------------------- | ---------------------------------------------- |
+| What is the end-user outcome when this project is done?        | Keeps issues outcome-focused, not task-focused |
+| What is explicitly out of scope for this project?              | Prevents unbounded scope during decomposition  |
+| Is there a target release date or sprint?                      | Informs milestone due date                     |
+| Are there known dependencies or constraints?                   | Surfaces blockers early                        |
+| Who is the primary audience — users, developers, or operators? | Shapes how acceptance criteria are written     |
 
 ---
 
@@ -62,12 +62,14 @@ Break the goal into **the smallest independently shippable units of work**. Each
 ### Decomposition patterns
 
 **Feature slice** (recommended default): cut vertically through the stack for each user-visible capability.
+
 ```
 ❌ "Build the database layer"        ← horizontal, not shippable alone
 ✓  "User can register with email"    ← vertical, delivers value
 ```
 
 **Dependency chain**: when sequential work is unavoidable, make dependencies explicit.
+
 ```
 Issue 1: Set up database schema for users
 Issue 2: Implement registration API (depends on #1)
@@ -75,6 +77,7 @@ Issue 3: Build registration UI (depends on #2)
 ```
 
 **Spike**: when the right approach is unknown, create a time-boxed investigation issue.
+
 ```
 Title: "Spike: evaluate auth library options (2h timebox)"
 Acceptance criteria: Decision documented in issue comments with recommendation
@@ -82,11 +85,11 @@ Acceptance criteria: Decision documented in issue comments with recommendation
 
 ### Typical issue count
 
-| Project size | Issues | Milestone duration |
-|---|---|---|
-| Small feature | 2–5 | 1–2 sprints |
-| Medium feature | 5–10 | 2–4 sprints |
-| Large feature / epic | 10–20 | 1–2 quarters |
+| Project size         | Issues | Milestone duration |
+| -------------------- | ------ | ------------------ |
+| Small feature        | 2–5    | 1–2 sprints        |
+| Medium feature       | 5–10   | 2–4 sprints        |
+| Large feature / epic | 10–20  | 1–2 quarters       |
 
 If decomposition yields more than 20 issues, the scope is too large — split into multiple milestones.
 

@@ -109,11 +109,6 @@
         "icon": "$(search)"
       },
       {
-        "command": "_mdm.addSkill#sideBar",
-        "title": "Add Skill",
-        "icon": "$(add)"
-      },
-      {
         "command": "_mdm.updateAllSkills#sideBar",
         "title": "Update All Skills",
         "icon": "$(sync)"
@@ -180,10 +175,6 @@
         },
         {
           "command": "_mdm.findSkill#sideBar",
-          "when": "false"
-        },
-        {
-          "command": "_mdm.addSkill#sideBar",
           "when": "false"
         },
         {

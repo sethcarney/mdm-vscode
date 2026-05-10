@@ -106,99 +106,6 @@ export function activate(context: vscode.ExtensionContext): void {
     ),
 
     vscode.commands.registerCommand(
-      "_mdm.addSkill#sideBar",
-      async (scope?: MdmScope) => {
-        const repo = await vscode.window.showInputBox({
-          prompt: "GitHub repo, URL, or local path containing the skill(s)",
-          placeHolder:
-            "owner/repo  or  https://github.com/owner/repo  or  ./path/to/skill",
-          validateInput: (v) =>
-            v.trim() ? undefined : "Repository is required"
-        });
-        if (!repo) {
-          return;
-        }
-
-        // Pre-flight audit — runs before scope picker so user decides on security first
-        let skipAudit = false;
-        try {
-          const auditResults = await vscode.window.withProgress(
-            {
-              location: vscode.ProgressLocation.Notification,
-              title: "Checking security…"
-            },
-            () => client.preInstallAudit(repo.trim())
-          );
-          const issues = auditResults.flatMap((r) =>
-            (r.audits ?? []).filter(
-              (a) => a.status === "warn" || a.status === "fail"
-            )
-          );
-          if (issues.length > 0) {
-            const skillId = auditResults[0]?.skillId;
-            const skillsShUrl = skillId
-              ? `https://skills.sh/${skillId}`
-              : undefined;
-            const buttons: string[] = ["Install Anyway"];
-            if (skillsShUrl) {
-              buttons.push("View on skills.sh");
-            }
-            const answer = await vscode.window.showWarningMessage(
-              `Security findings detected in "${repo.trim()}" (${issues.length} issue${issues.length > 1 ? "s" : ""}).`,
-              { modal: true },
-              ...buttons
-            );
-            if (answer === "View on skills.sh" && skillsShUrl) {
-              void vscode.env.openExternal(vscode.Uri.parse(skillsShUrl));
-              return;
-            }
-            if (answer !== "Install Anyway") {
-              return;
-            }
-            skipAudit = true;
-          }
-        } catch {
-          // network failure — continue without pre-flight, let install-time audit handle it
-        }
-
-        let resolvedScope: MdmScope | undefined = scope;
-        if (!resolvedScope) {
-          const scopePick = await vscode.window.showQuickPick(
-            [
-              {
-                label: "Project",
-                description: "Install into the current workspace",
-                scope: "project" as const
-              },
-              {
-                label: "Global",
-                description: "Install at the user level",
-                scope: "global" as const
-              }
-            ],
-            { placeHolder: "Select install scope" }
-          );
-          if (!scopePick) {
-            return;
-          }
-          resolvedScope = scopePick.scope;
-        }
-
-        const ok = await installSkillWithRetry(
-          client,
-          repo.trim(),
-          resolvedScope,
-          repo.trim(),
-          undefined,
-          skipAudit
-        );
-        if (ok) {
-          skillsProvider.refresh();
-        }
-      }
-    ),
-
-    vscode.commands.registerCommand(
       "_mdm.findSkill#sideBar",
       async (scope?: MdmScope) => {
         const picked = await findSkillInteractive(client);
@@ -210,7 +117,21 @@ export function activate(context: vscode.ExtensionContext): void {
         let label = picked.label;
         let skillName: string | undefined = picked.skillName || undefined;
 
-        if (picked.localAction) {
+        if (picked.urlAction) {
+          const input = await vscode.window.showInputBox({
+            prompt: "GitHub repo, URL, or local path containing the skill(s)",
+            placeHolder:
+              "owner/repo  or  https://github.com/owner/repo  or  ./path/to/skill",
+            validateInput: (v) =>
+              v.trim() ? undefined : "Repository is required"
+          });
+          if (!input) {
+            return;
+          }
+          source = input.trim();
+          label = input.trim();
+          skillName = undefined;
+        } else if (picked.localAction) {
           const uris = await vscode.window.showOpenDialog({
             canSelectFiles: false,
             canSelectFolders: true,
@@ -759,6 +680,7 @@ interface SkillPickItem extends vscode.QuickPickItem {
   source: string;
   skillName: string;
   localAction?: true;
+  urlAction?: true;
 }
 
 const LOCAL_PATH_ITEM: SkillPickItem = {
@@ -767,6 +689,15 @@ const LOCAL_PATH_ITEM: SkillPickItem = {
   source: "",
   skillName: "",
   localAction: true,
+  alwaysShow: true
+};
+
+const ENTER_URL_ITEM: SkillPickItem = {
+  label: "$(repo) Enter repo URL or path…",
+  description: "owner/repo  or  https://…  or  ./path",
+  source: "",
+  skillName: "",
+  urlAction: true,
   alwaysShow: true
 };
 
@@ -801,7 +732,7 @@ function findSkillInteractive(
         clearTimeout(debounceTimer);
       }
       if (!query) {
-        qp.items = [LOCAL_PATH_ITEM];
+        qp.items = [ENTER_URL_ITEM, LOCAL_PATH_ITEM];
         qp.busy = false;
         return;
       }
@@ -823,6 +754,7 @@ function findSkillInteractive(
                 skillName: r.name,
                 alwaysShow: true
               })),
+              ENTER_URL_ITEM,
               LOCAL_PATH_ITEM
             ];
           } catch {

@@ -362,16 +362,26 @@ export class MdmClient {
       }
     };
 
-    const [globalAgents, projectAgents] = await Promise.all([
+    const [globalAgents, projectAgents, rulesEntries] = await Promise.all([
       fetchScope(true),
-      fetchScope(false)
+      fetchScope(false),
+      this.rulesStatus().catch((): RulesEntry[] => [])
     ]);
 
-    return [...globalAgents, ...projectAgents].map((agent) => ({
-      name: agent.displayName,
-      scope: agent.scope,
-      filePath: agent.scope === "global" ? globalAgentsFile : projectAgentsFile
-    }));
+    const missingRules = new Set(
+      rulesEntries.filter((e) => e.state === "missing").flatMap((e) => e.agents)
+    );
+
+    return [...globalAgents, ...projectAgents].map((agent) => {
+      const slug = agent.displayName.toLowerCase().replace(/\s+/g, "-");
+      return {
+        name: agent.displayName,
+        scope: agent.scope,
+        filePath:
+          agent.scope === "global" ? globalAgentsFile : projectAgentsFile,
+        status: missingRules.has(slug) ? "⚠ rules not linked" : undefined
+      };
+    });
   }
 }
 

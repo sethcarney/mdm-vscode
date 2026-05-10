@@ -306,14 +306,12 @@ export class MdmRulesTreeProvider implements vscode.TreeDataProvider<MdmRulesIte
       ];
     }
 
-    const visible = entries.filter(
-      (e) => e.state === "linked" || e.state === "missing"
-    );
+    const visible = entries.filter((e) => e.state === "linked");
 
     if (visible.length === 0) {
       return [
         rulesMessageItem(
-          "No rules found — use the link button above to add one"
+          "No rules linked — use the link button above to add one"
         )
       ];
     }

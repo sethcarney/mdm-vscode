@@ -289,46 +289,49 @@ export function activate(context: vscode.ExtensionContext): void {
       }
     }),
 
-    vscode.commands.registerCommand("_mdm.updateAllSkills#sideBar", async () => {
-      const scopePick = await vscode.window.showQuickPick(
-        [
-          {
-            label: "All",
-            description: "Update project and global skills",
-            scope: undefined as MdmScope | undefined
-          },
-          {
-            label: "Project",
-            description: "Update project skills only",
-            scope: "project" as const
-          },
-          {
-            label: "Global",
-            description: "Update global skills only",
-            scope: "global" as const
-          }
-        ],
-        { placeHolder: "Which skills to update?" }
-      );
-      if (!scopePick) {
-        return;
-      }
+    vscode.commands.registerCommand(
+      "_mdm.updateAllSkills#sideBar",
+      async () => {
+        const scopePick = await vscode.window.showQuickPick(
+          [
+            {
+              label: "All",
+              description: "Update project and global skills",
+              scope: undefined as MdmScope | undefined
+            },
+            {
+              label: "Project",
+              description: "Update project skills only",
+              scope: "project" as const
+            },
+            {
+              label: "Global",
+              description: "Update global skills only",
+              scope: "global" as const
+            }
+          ],
+          { placeHolder: "Which skills to update?" }
+        );
+        if (!scopePick) {
+          return;
+        }
 
-      try {
-        await vscode.window.withProgress(
-          {
-            location: vscode.ProgressLocation.Notification,
-            title: "Updating all skills…"
-          },
-          () => client.updateAllSkills(scopePick.scope)
-        );
-        skillsProvider.refresh();
-      } catch (err) {
-        void vscode.window.showErrorMessage(
-          `Failed to update skills: ${err instanceof Error ? err.message : String(err)}`
-        );
+        try {
+          await vscode.window.withProgress(
+            {
+              location: vscode.ProgressLocation.Notification,
+              title: "Updating all skills…"
+            },
+            () => client.updateAllSkills(scopePick.scope)
+          );
+          skillsProvider.refresh();
+        } catch (err) {
+          void vscode.window.showErrorMessage(
+            `Failed to update skills: ${err instanceof Error ? err.message : String(err)}`
+          );
+        }
       }
-    }),
+    ),
 
     vscode.commands.registerCommand("_mdm.auditSkills#sideBar", async () => {
       const scopePick = await vscode.window.showQuickPick(

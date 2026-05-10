@@ -7,8 +7,5 @@
       "sourceType": "github"
     }
   },
-  "configuredAgents": [
-    "claude-code",
-    "github-copilot"
-  ]
+  "configuredAgents": ["claude-code", "github-copilot"]
 }

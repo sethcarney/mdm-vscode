@@ -74,6 +74,7 @@ export class MdmTreeItem extends vscode.TreeItem {
 
     if (resource === "skills") {
       this.iconPath = new vscode.ThemeIcon("symbol-function");
+      this.description = item.ref;
       this.contextValue = "mdm-skill";
     } else {
       this.iconPath = new vscode.ThemeIcon("robot");

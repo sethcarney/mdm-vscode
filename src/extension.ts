@@ -1,6 +1,6 @@
 import * as path from "path";
 import * as vscode from "vscode";
-import { MdmClient, MdmScope } from "./mdmClient";
+import { MdmClient, MdmScope, stripAnsi } from "./mdmClient";
 import {
   MdmRulesItem,
   MdmRulesTreeProvider,
@@ -775,13 +775,16 @@ function findSkillInteractive(
 }
 
 function extractErrOutput(err: unknown): string {
+  let raw: string;
   if (err && typeof err === "object") {
     const e = err as Record<string, unknown>;
-    return [e["stdout"], e["stderr"], e["message"]]
+    raw = [e["stdout"], e["stderr"], e["message"]]
       .filter((v): v is string => typeof v === "string")
       .join("\n");
+  } else {
+    raw = String(err);
   }
-  return String(err);
+  return stripAnsi(raw);
 }
 
 async function installSkillWithRetry(
@@ -812,7 +815,7 @@ async function installSkillWithRetry(
       return true;
     } catch (retryErr) {
       void vscode.window.showErrorMessage(
-        `Failed to install skill: ${retryErr instanceof Error ? retryErr.message : String(retryErr)}`
+        `Failed to install skill: ${extractErrOutput(retryErr)}`
       );
       return false;
     }

@@ -693,8 +693,8 @@ const LOCAL_PATH_ITEM: SkillPickItem = {
 };
 
 const ENTER_URL_ITEM: SkillPickItem = {
-  label: "$(repo) Enter repo URL or path…",
-  description: "owner/repo  or  https://…  ",
+  label: "$(repo) Enter repo URL",
+  description: "owner/repo or https://…",
   source: "",
   skillName: "",
   urlAction: true,

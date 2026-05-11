@@ -61,6 +61,8 @@ export interface MdmItem {
   filePath?: string;
   /** Human-readable status label, e.g. "✓ installed". */
   status?: string;
+  /** Git ref (tag, branch, or commit hash) for the installed version. */
+  ref?: string;
 }
 
 interface AgentJson {
@@ -370,7 +372,7 @@ export class MdmClient {
 // Parsers
 // ---------------------------------------------------------------------------
 
-function stripAnsi(text: string): string {
+export function stripAnsi(text: string): string {
   return text.replace(/\x1B\[[0-9;]*m/g, "");
 }
 
@@ -454,12 +456,14 @@ function parseSkillsJson(raw: string): MdmItem[] {
       obj["Scope"] ?? obj["scope"] ?? "global"
     ).toLowerCase();
     const itemPath = String(obj["Path"] ?? obj["path"] ?? "");
+    const refRaw = obj["Ref"] ?? obj["ref"];
     return {
       name,
       description:
         desc !== undefined && desc !== null ? String(desc) : undefined,
       scope: scopeRaw === "project" ? "project" : "global",
-      filePath: itemPath ? path.join(itemPath, "SKILL.md") : undefined
+      filePath: itemPath ? path.join(itemPath, "SKILL.md") : undefined,
+      ref: refRaw !== undefined && refRaw !== null ? String(refRaw) : undefined
     } satisfies MdmItem;
   });
 }

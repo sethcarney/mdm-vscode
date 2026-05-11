@@ -1,7 +1,7 @@
 {
   "name": "mdm-sidebar",
   "displayName": "MDM",
-  "description": "VS Code extension for the MDM CLI tool — browse Skills and Agents from the sidebar.",
+  "description": "VS Code extension for the MDM CLI tool. Browse agentic tool configurations from the sidebar.",
   "version": "1.1.1",
   "publisher": "SethsSoftware",
   "license": "Apache-2.0",

@@ -275,7 +275,13 @@ function resolveAgentsMdPath(entry: RulesEntry): string | undefined {
     return target;
   }
   const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-  return root ? path.join(root, target) : undefined;
+  if (!root) {
+    return undefined;
+  }
+  // Symlink targets are stored relative to the symlink's own directory
+  // (e.g. .github/copilot-instructions.md → ../AGENTS.md).
+  const entryDir = path.dirname(path.join(root, entry.file));
+  return path.resolve(entryDir, target);
 }
 
 export class MdmRulesTreeProvider implements vscode.TreeDataProvider<MdmRulesItem> {

@@ -23,8 +23,9 @@ bun run compile
 2. Make your changes
 3. Run `bun run compile` to verify TypeScript compiles cleanly
 4. Run `bun run lint` to check for lint errors
-5. Test manually via the Extension Development Host (`F5` in VS Code)
-6. Submit a pull request
+5. Run `bun run format:check` (or `bun run format` to fix) — CI enforces this
+6. Test manually via the Extension Development Host (`F5` in VS Code)
+7. Submit a pull request
 
 ## Branch Naming
 
@@ -54,7 +55,7 @@ chore: bump dependencies
 
 - TypeScript with strict mode enabled
 - ESLint: `bun run lint`
-- Prettier: `.prettierrc` is provided for editor integration; there is no automated format check
+- Prettier: `bun run format:check` runs in CI; `bun run format` applies fixes locally
 
 ## Releasing
 

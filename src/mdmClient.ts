@@ -325,9 +325,13 @@ export class MdmClient {
 
   private async listAgents(): Promise<MdmItem[]> {
     const opts = { timeout: 10_000, cwd: this.workspaceRoot };
-    const globalAgentsFile = path.join(os.homedir(), ".agents", "AGENTS.md");
-    const projectAgentsFile = this.workspaceRoot
-      ? path.join(this.workspaceRoot, "AGENTS.md")
+    const globalSkillsLock = path.join(
+      os.homedir(),
+      ".agents",
+      "skills-lock.json"
+    );
+    const projectSkillsLock = this.workspaceRoot
+      ? path.join(this.workspaceRoot, "skills-lock.json")
       : undefined;
 
     const fetchScope = async (global: boolean): Promise<AgentJson[]> => {
@@ -361,7 +365,7 @@ export class MdmClient {
       name: agent.displayName,
       cliName: agent.name,
       scope: agent.scope,
-      filePath: agent.scope === "global" ? globalAgentsFile : projectAgentsFile,
+      filePath: agent.scope === "global" ? globalSkillsLock : projectSkillsLock,
       status: missingRules.has(agent.name) ? "⚠ rules not linked" : undefined
     }));
   }

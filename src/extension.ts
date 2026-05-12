@@ -71,7 +71,7 @@ export function activate(context: vscode.ExtensionContext): void {
         outputChannel.show(true);
       } catch (err) {
         void vscode.window.showErrorMessage(
-          `MDM doctor failed: ${err instanceof Error ? err.message : String(err)}`
+          `MDM doctor failed: ${formatError(err)}`
         );
       }
     }),
@@ -88,7 +88,7 @@ export function activate(context: vscode.ExtensionContext): void {
         skillsProvider.refresh();
       } catch (err) {
         void vscode.window.showErrorMessage(
-          `Failed to install skills: ${err instanceof Error ? err.message : String(err)}`
+          `Failed to install skills: ${formatError(err)}`
         );
       }
     }),
@@ -189,27 +189,15 @@ export function activate(context: vscode.ExtensionContext): void {
           // network failure — continue without pre-flight, let install-time audit handle it
         }
 
-        let resolvedScope: MdmScope | undefined = scope;
+        const resolvedScope =
+          scope ??
+          (await pickScope({
+            placeHolder: "Select install scope",
+            projectDescription: "Install into the current workspace",
+            globalDescription: "Install at the user level"
+          }));
         if (!resolvedScope) {
-          const scopePick = await vscode.window.showQuickPick(
-            [
-              {
-                label: "Project",
-                description: "Install into the current workspace",
-                scope: "project" as const
-              },
-              {
-                label: "Global",
-                description: "Install at the user level",
-                scope: "global" as const
-              }
-            ],
-            { placeHolder: "Select install scope" }
-          );
-          if (!scopePick) {
-            return;
-          }
-          resolvedScope = scopePick.scope;
+          return;
         }
 
         const ok = await installSkillWithRetry(
@@ -229,27 +217,13 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand(
       "_mdm.updateAllSkills#sideBar",
       async () => {
-        const scopePick = await vscode.window.showQuickPick(
-          [
-            {
-              label: "All",
-              description: "Update project and global skills",
-              scope: undefined as MdmScope | undefined
-            },
-            {
-              label: "Project",
-              description: "Update project skills only",
-              scope: "project" as const
-            },
-            {
-              label: "Global",
-              description: "Update global skills only",
-              scope: "global" as const
-            }
-          ],
-          { placeHolder: "Which skills to update?" }
-        );
-        if (!scopePick) {
+        const scopePick = await pickScopeOrAll({
+          placeHolder: "Which skills to update?",
+          allDescription: "Update project and global skills",
+          projectDescription: "Update project skills only",
+          globalDescription: "Update global skills only"
+        });
+        if (scopePick === "cancelled") {
           return;
         }
 
@@ -259,39 +233,25 @@ export function activate(context: vscode.ExtensionContext): void {
               location: vscode.ProgressLocation.Notification,
               title: "Updating all skills…"
             },
-            () => client.updateAllSkills(scopePick.scope)
+            () => client.updateAllSkills(scopePick)
           );
           skillsProvider.refresh();
         } catch (err) {
           void vscode.window.showErrorMessage(
-            `Failed to update skills: ${err instanceof Error ? err.message : String(err)}`
+            `Failed to update skills: ${formatError(err)}`
           );
         }
       }
     ),
 
     vscode.commands.registerCommand("_mdm.auditSkills#sideBar", async () => {
-      const scopePick = await vscode.window.showQuickPick(
-        [
-          {
-            label: "All",
-            description: "Audit project and global skills",
-            scope: undefined as MdmScope | undefined
-          },
-          {
-            label: "Project",
-            description: "Audit project skills only",
-            scope: "project" as const
-          },
-          {
-            label: "Global",
-            description: "Audit global skills only",
-            scope: "global" as const
-          }
-        ],
-        { placeHolder: "Which skills to audit?" }
-      );
-      if (!scopePick) {
+      const scopePick = await pickScopeOrAll({
+        placeHolder: "Which skills to audit?",
+        allDescription: "Audit project and global skills",
+        projectDescription: "Audit project skills only",
+        globalDescription: "Audit global skills only"
+      });
+      if (scopePick === "cancelled") {
         return;
       }
 
@@ -302,11 +262,11 @@ export function activate(context: vscode.ExtensionContext): void {
             location: vscode.ProgressLocation.Notification,
             title: "Auditing skills…"
           },
-          () => client.auditSkills(scopePick.scope)
+          () => client.auditSkills(scopePick)
         );
       } catch (err) {
         void vscode.window.showErrorMessage(
-          `Audit failed: ${err instanceof Error ? err.message : String(err)}`
+          `Audit failed: ${formatError(err)}`
         );
         return;
       }
@@ -371,7 +331,7 @@ export function activate(context: vscode.ExtensionContext): void {
           skillsProvider.refresh();
         } catch (err) {
           void vscode.window.showErrorMessage(
-            `Failed to remove skill: ${err instanceof Error ? err.message : String(err)}`
+            `Failed to remove skill: ${formatError(err)}`
           );
         }
       }
@@ -397,7 +357,7 @@ export function activate(context: vscode.ExtensionContext): void {
           skillsProvider.refresh();
         } catch (err) {
           void vscode.window.showErrorMessage(
-            `Failed to update skill: ${err instanceof Error ? err.message : String(err)}`
+            `Failed to update skill: ${formatError(err)}`
           );
         }
       }
@@ -406,27 +366,15 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand(
       "_mdm.addAgent#sideBar",
       async (scope?: MdmScope) => {
-        let resolvedScope: MdmScope | undefined = scope;
+        const resolvedScope =
+          scope ??
+          (await pickScope({
+            placeHolder: "Select scope for the new agent",
+            projectDescription: "Add to the current workspace",
+            globalDescription: "Add to your user-level agent list"
+          }));
         if (!resolvedScope) {
-          const scopePick = await vscode.window.showQuickPick(
-            [
-              {
-                label: "Project",
-                description: "Add to the current workspace",
-                scope: "project" as const
-              },
-              {
-                label: "Global",
-                description: "Add to your user-level agent list",
-                scope: "global" as const
-              }
-            ],
-            { placeHolder: "Select scope for the new agent" }
-          );
-          if (!scopePick) {
-            return;
-          }
-          resolvedScope = scopePick.scope;
+          return;
         }
 
         let available: {
@@ -442,7 +390,7 @@ export function activate(context: vscode.ExtensionContext): void {
           const configuredNames = new Set(
             configured
               .filter((a) => a.scope === resolvedScope)
-              .map((a) => a.name.toLowerCase().replace(/\s+/g, "-"))
+              .map((a) => a.cliName ?? a.name)
           );
           available = allAgents
             .filter((a) => !configuredNames.has(a.name))
@@ -453,7 +401,7 @@ export function activate(context: vscode.ExtensionContext): void {
             }));
         } catch (err) {
           void vscode.window.showErrorMessage(
-            `Failed to fetch agents: ${err instanceof Error ? err.message : String(err)}`
+            `Failed to fetch agents: ${formatError(err)}`
           );
           return;
         }
@@ -484,7 +432,7 @@ export function activate(context: vscode.ExtensionContext): void {
           agentsProvider.refresh();
         } catch (err) {
           void vscode.window.showErrorMessage(
-            `Failed to add agent: ${err instanceof Error ? err.message : String(err)}`
+            `Failed to add agent: ${formatError(err)}`
           );
         }
       }
@@ -493,13 +441,14 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand(
       "_mdm.deleteAgent#sideBar",
       async (item: MdmTreeItem) => {
-        const name = item.mdmItem?.name;
+        const displayName = item.mdmItem?.name;
+        const cliName = item.mdmItem?.cliName ?? displayName;
         const scope = item.mdmItem?.scope ?? "project";
-        if (!name) {
+        if (!displayName || !cliName) {
           return;
         }
         const answer = await vscode.window.showWarningMessage(
-          `Remove agent "${name}" (${scope})?`,
+          `Remove agent "${displayName}" (${scope})?`,
           { modal: true },
           "Remove"
         );
@@ -507,12 +456,11 @@ export function activate(context: vscode.ExtensionContext): void {
           return;
         }
         try {
-          const slug = name.toLowerCase().replace(/\s+/g, "-");
-          await client.removeAgent(slug, scope);
+          await client.removeAgent(cliName, scope);
           agentsProvider.refresh();
         } catch (err) {
           void vscode.window.showErrorMessage(
-            `Failed to remove agent: ${err instanceof Error ? err.message : String(err)}`
+            `Failed to remove agent: ${formatError(err)}`
           );
         }
       }
@@ -524,7 +472,7 @@ export function activate(context: vscode.ExtensionContext): void {
         entries = await client.rulesStatus();
       } catch (err) {
         void vscode.window.showErrorMessage(
-          `Failed to get rules status: ${err instanceof Error ? err.message : String(err)}`
+          `Failed to get rules status: ${formatError(err)}`
         );
         return;
       }
@@ -564,7 +512,7 @@ export function activate(context: vscode.ExtensionContext): void {
         rulesProvider.refresh();
       } catch (err) {
         void vscode.window.showErrorMessage(
-          `Failed to link rules: ${err instanceof Error ? err.message : String(err)}`
+          `Failed to link rules: ${formatError(err)}`
         );
       }
     }),
@@ -591,7 +539,7 @@ export function activate(context: vscode.ExtensionContext): void {
           rulesProvider.refresh();
         } catch (err) {
           void vscode.window.showErrorMessage(
-            `Failed to link rules: ${err instanceof Error ? err.message : String(err)}`
+            `Failed to link rules: ${formatError(err)}`
           );
         }
       }
@@ -627,7 +575,7 @@ export function activate(context: vscode.ExtensionContext): void {
           rulesProvider.refresh();
         } catch (err) {
           void vscode.window.showErrorMessage(
-            `Failed to unlink rules: ${err instanceof Error ? err.message : String(err)}`
+            `Failed to unlink rules: ${formatError(err)}`
           );
         }
       }
@@ -669,9 +617,73 @@ function checkCliAndWarn(client: MdmClient): void {
     })
     .catch((err) => {
       void vscode.window.showErrorMessage(
-        `MDM: error checking CLI: ${err instanceof Error ? err.message : String(err)}`
+        `MDM: error checking CLI: ${formatError(err)}`
       );
     });
+}
+
+function formatError(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+interface ScopePickerOptions {
+  placeHolder: string;
+  projectDescription: string;
+  globalDescription: string;
+}
+
+async function pickScope(
+  options: ScopePickerOptions
+): Promise<MdmScope | undefined> {
+  const pick = await vscode.window.showQuickPick(
+    [
+      {
+        label: "Project",
+        description: options.projectDescription,
+        scope: "project" as const
+      },
+      {
+        label: "Global",
+        description: options.globalDescription,
+        scope: "global" as const
+      }
+    ],
+    { placeHolder: options.placeHolder }
+  );
+  return pick?.scope;
+}
+
+interface ScopeOrAllOptions extends ScopePickerOptions {
+  allDescription: string;
+}
+
+async function pickScopeOrAll(
+  options: ScopeOrAllOptions
+): Promise<MdmScope | undefined | "cancelled"> {
+  const pick = await vscode.window.showQuickPick(
+    [
+      {
+        label: "All",
+        description: options.allDescription,
+        scope: undefined as MdmScope | undefined
+      },
+      {
+        label: "Project",
+        description: options.projectDescription,
+        scope: "project" as const
+      },
+      {
+        label: "Global",
+        description: options.globalDescription,
+        scope: "global" as const
+      }
+    ],
+    { placeHolder: options.placeHolder }
+  );
+  if (!pick) {
+    return "cancelled";
+  }
+  return pick.scope;
 }
 
 export function deactivate(): void {}

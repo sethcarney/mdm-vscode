@@ -63,6 +63,8 @@ export interface MdmItem {
   status?: string;
   /** Git ref (tag, branch, or commit hash) for the installed version. */
   ref?: string;
+  /** Canonical CLI identifier (e.g. "claude-code"). Falls back to `name`. */
+  cliName?: string;
 }
 
 interface AgentJson {
@@ -355,16 +357,13 @@ export class MdmClient {
       rulesEntries.filter((e) => e.state === "missing").flatMap((e) => e.agents)
     );
 
-    return [...globalAgents, ...projectAgents].map((agent) => {
-      const slug = agent.displayName.toLowerCase().replace(/\s+/g, "-");
-      return {
-        name: agent.displayName,
-        scope: agent.scope,
-        filePath:
-          agent.scope === "global" ? globalAgentsFile : projectAgentsFile,
-        status: missingRules.has(slug) ? "⚠ rules not linked" : undefined
-      };
-    });
+    return [...globalAgents, ...projectAgents].map((agent) => ({
+      name: agent.displayName,
+      cliName: agent.name,
+      scope: agent.scope,
+      filePath: agent.scope === "global" ? globalAgentsFile : projectAgentsFile,
+      status: missingRules.has(agent.name) ? "⚠ rules not linked" : undefined
+    }));
   }
 }
 

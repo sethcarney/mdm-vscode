@@ -14,10 +14,12 @@ Manage your markdown-driven Skills, Agents, and Rules through the VS Code UI, wi
 ## Features
 
 - **Activity Bar icon** - dedicated MDM panel in the left sidebar
-- **Three collapsible sections**: Skills · Agents · Rules
-- **Markdown management in VS Code** - manage markdown-backed items in the UI while MDM handles the CLI work behind the scenes
-- **Live data** fetched from the MDM CLI on demand
-- **Refresh button** per section to reload without restarting VS Code
+- **Three collapsible sections**: Skills · Agents · Rules — each grouped by Global / Project scope
+- **Skill management** - find, install, update, audit, and remove skills without leaving the editor
+- **Agent management** - add and remove configured agents per scope; warns when an agent's rules file isn't linked
+- **Rules management** - link / unlink agent rule files to `AGENTS.md` from the sidebar
+- **Doctor in the status bar** - one-click `$(pulse) MDM` button to run `mdm doctor` and stream output to a channel
+- **Live data** fetched from the MDM CLI on demand; per-section refresh button reloads without restarting VS Code
 - **Copy name** context menu action on any item
 - **Graceful error handling** - shows a clear message and settings shortcut when the CLI is not found
 
@@ -40,9 +42,7 @@ If you installed the CLI to a non-standard location, set `mdm.cliPath` in VS Cod
 
 ## CLI Commands Used
 
-The extension queries Skills, Agents, and Rules through the MDM CLI and uses compatible command fallbacks across CLI versions.
-
-Both JSON and plain-text output are supported.
+The extension drives Skills, Agents, and Rules entirely through `mdm <subcommand> --json`. Output is validated against per-shape type guards before being rendered, so an unfamiliar CLI response surfaces as an in-tree error rather than a silent failure.
 
 Implementation details are documented in [AGENTS.md](AGENTS.md).
 
@@ -61,12 +61,14 @@ Press `F5` in VS Code to open the Extension Development Host with the extension 
 
 ### Scripts
 
-| Command           | Description                  |
-| ----------------- | ---------------------------- |
-| `bun run compile` | Compile TypeScript to `out/` |
-| `bun run watch`   | Watch mode                   |
-| `bun run lint`    | Run ESLint                   |
-| `bun run package` | Package as `.vsix`           |
+| Command                | Description                               |
+| ---------------------- | ----------------------------------------- |
+| `bun run compile`      | Compile TypeScript to `out/`              |
+| `bun run watch`        | Watch mode                                |
+| `bun run lint`         | Run ESLint                                |
+| `bun run format`       | Apply Prettier formatting                 |
+| `bun run format:check` | Verify Prettier formatting (CI runs this) |
+| `bun run package`      | Package as `.vsix`                        |
 
 ### Releasing
 

@@ -2,9 +2,12 @@
 
 ## Supported Versions
 
-| Version | Supported          |
-| ------- | ------------------ |
-| 0.x.x   | :white_check_mark: |
+Only the latest released version receives security fixes. Please update before reporting issues.
+
+| Version  | Supported          |
+| -------- | ------------------ |
+| latest   | :white_check_mark: |
+| previous | :x:                |
 
 ## Reporting a Vulnerability
 

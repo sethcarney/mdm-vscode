@@ -1,3 +1,4 @@
+import * as path from "path";
 import * as vscode from "vscode";
 import {
   MdmClient,
@@ -250,7 +251,37 @@ export class MdmRulesItem extends vscode.TreeItem {
       this.contextValue = "mdm-rule-missing";
       this.tooltip = `${entry.file}\nNot yet linked to AGENTS.md`;
     }
+
+    if (entry.state === "linked" || entry.state === "real") {
+      const agentsFile = resolveAgentsMdPath(entry);
+      if (agentsFile) {
+        this.command = {
+          command: "vscode.open",
+          title: "Open AGENTS.md",
+          arguments: [vscode.Uri.file(agentsFile)]
+        };
+      }
+    }
   }
+}
+
+function resolveAgentsMdPath(entry: RulesEntry): string | undefined {
+  const target =
+    entry.state === "real" ? entry.file : (entry.target ?? "AGENTS.md");
+  if (!target) {
+    return undefined;
+  }
+  if (path.isAbsolute(target)) {
+    return target;
+  }
+  const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  if (!root) {
+    return undefined;
+  }
+  // Symlink targets are stored relative to the symlink's own directory
+  // (e.g. .github/copilot-instructions.md → ../AGENTS.md).
+  const entryDir = path.dirname(path.join(root, entry.file));
+  return path.resolve(entryDir, target);
 }
 
 export class MdmRulesTreeProvider implements vscode.TreeDataProvider<MdmRulesItem> {

@@ -107,7 +107,8 @@ export function activate(context: vscode.ExtensionContext): void {
 
     vscode.commands.registerCommand(
       "_mdm.findSkill#sideBar",
-      async (scope?: MdmScope) => {
+      async (context?: MdmTreeItem) => {
+        const scope = context?.itemScope;
         const picked = await findSkillInteractive(client);
         if (!picked) {
           return;
@@ -365,7 +366,8 @@ export function activate(context: vscode.ExtensionContext): void {
 
     vscode.commands.registerCommand(
       "_mdm.addAgent#sideBar",
-      async (scope?: MdmScope) => {
+      async (context?: MdmTreeItem) => {
+        const scope = context?.itemScope;
         const resolvedScope =
           scope ??
           (await pickScope({
@@ -468,8 +470,12 @@ export function activate(context: vscode.ExtensionContext): void {
 
     vscode.commands.registerCommand("_mdm.rulesLinkAgent#sideBar", async () => {
       let entries: import("./mdmClient").RulesEntry[];
+      let configured: import("./mdmClient").MdmItem[];
       try {
-        entries = await client.rulesStatus();
+        [entries, configured] = await Promise.all([
+          client.rulesStatus(),
+          client.listItems("agents")
+        ]);
       } catch (err) {
         void vscode.window.showErrorMessage(
           `Failed to get rules status: ${formatError(err)}`
@@ -477,37 +483,62 @@ export function activate(context: vscode.ExtensionContext): void {
         return;
       }
 
-      const missing = entries.filter(
-        (e) => e.state === "missing" && e.agents.length > 0
+      const linkedAgents = new Set(
+        entries.filter((e) => e.state === "linked").flatMap((e) => e.agents)
       );
-      if (missing.length === 0) {
+      const fileByAgent = new Map<string, string>();
+      for (const entry of entries) {
+        if (entry.state === "linked") {
+          continue;
+        }
+        for (const agent of entry.agents) {
+          if (!fileByAgent.has(agent)) {
+            fileByAgent.set(agent, entry.file);
+          }
+        }
+      }
+
+      interface LinkPick {
+        label: string;
+        description: string;
+        agent: string;
+      }
+      const seen = new Set<string>();
+      const picks: LinkPick[] = [];
+      for (const item of configured) {
+        const agent = item.cliName ?? item.name;
+        if (linkedAgents.has(agent) || seen.has(agent)) {
+          continue;
+        }
+        seen.add(agent);
+        picks.push({
+          label: item.name,
+          description: fileByAgent.get(agent) ?? agent,
+          agent
+        });
+      }
+
+      if (picks.length === 0) {
         void vscode.window.showInformationMessage(
           "All agent rules are already linked."
         );
         return;
       }
 
-      const picks = missing.map((e) => ({
-        label: e.file,
-        description: e.agents.join(", "),
-        entry: e
-      }));
-
       const picked = await vscode.window.showQuickPick(picks, {
-        placeHolder: "Select a rule file to link to AGENTS.md"
+        placeHolder: "Select an agent to link to AGENTS.md"
       });
       if (!picked) {
         return;
       }
 
-      const agent = picked.entry.agents[0];
       try {
         await vscode.window.withProgress(
           {
             location: vscode.ProgressLocation.Notification,
-            title: `Linking ${picked.entry.file}…`
+            title: `Linking ${picked.label}…`
           },
-          () => client.rulesLink(agent)
+          () => client.rulesLink(picked.agent)
         );
         rulesProvider.refresh();
       } catch (err) {

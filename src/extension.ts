@@ -150,14 +150,48 @@ export function activate(context: vscode.ExtensionContext): void {
 
         // Pre-flight audit — runs before scope picker so user decides on security first
         let skipAudit = false;
+        let selectedSkillNames: string[] | undefined;
         try {
-          const auditResults = await vscode.window.withProgress(
+          let auditResults = await vscode.window.withProgress(
             {
               location: vscode.ProgressLocation.Notification,
               title: `Checking security for "${label}"…`
             },
             () => client.preInstallAudit(source, skillName)
           );
+
+          // When a source contains multiple skills and none was pre-selected,
+          // let the user pick which ones to install.
+          if (auditResults.length > 1 && !skillName) {
+            const picks = await vscode.window.showQuickPick(
+              auditResults.map((r) => {
+                const issueCount = (r.audits ?? []).filter(
+                  (a) => a.status === "warn" || a.status === "fail"
+                ).length;
+                return {
+                  label: r.name,
+                  description:
+                    issueCount > 0
+                      ? `⚠ ${issueCount} security issue${issueCount > 1 ? "s" : ""}`
+                      : undefined,
+                  picked: true
+                };
+              }),
+              {
+                canPickMany: true,
+                title: `Skills available in "${label}"`,
+                placeHolder: "Select skills to install (all selected by default)"
+              }
+            );
+            if (!picks || picks.length === 0) {
+              return;
+            }
+            selectedSkillNames = picks.map((p) => p.label);
+            auditResults = auditResults.filter((r) =>
+              selectedSkillNames!.includes(r.name)
+            );
+          }
+
           const issues = auditResults.flatMap((r) =>
             (r.audits ?? []).filter(
               (a) => a.status === "warn" || a.status === "fail"
@@ -201,16 +235,36 @@ export function activate(context: vscode.ExtensionContext): void {
           return;
         }
 
-        const ok = await installSkillWithRetry(
-          client,
-          source,
-          resolvedScope,
-          label,
-          skillName,
-          skipAudit
-        );
-        if (ok) {
-          skillsProvider.refresh();
+        if (selectedSkillNames) {
+          let anyInstalled = false;
+          for (const sn of selectedSkillNames) {
+            const ok = await installSkillWithRetry(
+              client,
+              source,
+              resolvedScope,
+              sn,
+              sn,
+              skipAudit
+            );
+            if (ok) {
+              anyInstalled = true;
+            }
+          }
+          if (anyInstalled) {
+            skillsProvider.refresh();
+          }
+        } else {
+          const ok = await installSkillWithRetry(
+            client,
+            source,
+            resolvedScope,
+            label,
+            skillName,
+            skipAudit
+          );
+          if (ok) {
+            skillsProvider.refresh();
+          }
         }
       }
     ),

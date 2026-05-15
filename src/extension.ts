@@ -170,7 +170,8 @@ export function activate(context: vscode.ExtensionContext): void {
                 {
                   canPickMany: true,
                   title: `Skills available in "${label}"`,
-                  placeHolder: "Select skills to install (all selected by default)"
+                  placeHolder:
+                    "Select skills to install (all selected by default)"
                 }
               );
               if (!picks || picks.length === 0) {

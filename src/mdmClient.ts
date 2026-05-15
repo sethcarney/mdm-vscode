@@ -32,6 +32,11 @@ export interface FindSkillResult {
   repo?: string;
 }
 
+export interface RemoteSkillEntry {
+  name: string;
+  description?: string;
+}
+
 export interface AuditProvider {
   provider: string;
   slug?: string;
@@ -232,13 +237,13 @@ export class MdmClient {
     return assertJsonArray(stdout, isFindSkillResult, "skills find");
   }
 
-  async listRemoteSkills(source: string): Promise<FindSkillResult[]> {
+  async listRemoteSkills(source: string): Promise<RemoteSkillEntry[]> {
     const { stdout } = await execFileAsync(
       this.cliPath,
       ["skills", "find", "--source", source, "--json"],
       { timeout: 15_000, cwd: this.workspaceRoot }
     );
-    return assertJsonArray(stdout, isFindSkillResult, "skills find --source");
+    return assertJsonArray(stdout, isRemoteSkillEntry, "skills find --source");
   }
 
   async auditSkills(scope?: MdmScope): Promise<AuditResult[]> {
@@ -415,6 +420,13 @@ function isKnownAgent(v: unknown): v is KnownAgent {
   }
   const o = v as Record<string, unknown>;
   return typeof o["name"] === "string" && typeof o["displayName"] === "string";
+}
+
+function isRemoteSkillEntry(v: unknown): v is RemoteSkillEntry {
+  if (typeof v !== "object" || v === null) {
+    return false;
+  }
+  return typeof (v as Record<string, unknown>)["name"] === "string";
 }
 
 function isFindSkillResult(v: unknown): v is FindSkillResult {

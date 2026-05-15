@@ -232,6 +232,15 @@ export class MdmClient {
     return assertJsonArray(stdout, isFindSkillResult, "skills find");
   }
 
+  async listRemoteSkills(source: string): Promise<FindSkillResult[]> {
+    const { stdout } = await execFileAsync(
+      this.cliPath,
+      ["skills", "find", "--source", source, "--json"],
+      { timeout: 15_000, cwd: this.workspaceRoot }
+    );
+    return assertJsonArray(stdout, isFindSkillResult, "skills find --source");
+  }
+
   async auditSkills(scope?: MdmScope): Promise<AuditResult[]> {
     const args = ["skills", "audit", "--json"];
     if (scope === "global") {

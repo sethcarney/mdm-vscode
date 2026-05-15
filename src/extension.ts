@@ -148,50 +148,51 @@ export function activate(context: vscode.ExtensionContext): void {
           skillName = undefined;
         }
 
-        // Pre-flight audit — runs before scope picker so user decides on security first
-        let skipAudit = false;
+        // Discover available skills so the user can pick a subset before installing.
+        // Only runs for URL/path sources where no specific skill was pre-selected.
         let selectedSkillNames: string[] | undefined;
+        if (!skillName) {
+          try {
+            const remoteSkills = await vscode.window.withProgress(
+              {
+                location: vscode.ProgressLocation.Notification,
+                title: `Fetching skills from "${label}"…`
+              },
+              () => client.listRemoteSkills(source)
+            );
+            if (remoteSkills.length > 1) {
+              const picks = await vscode.window.showQuickPick(
+                remoteSkills.map((s) => ({
+                  label: s.name,
+                  description: s.description || undefined,
+                  picked: true
+                })),
+                {
+                  canPickMany: true,
+                  title: `Skills available in "${label}"`,
+                  placeHolder: "Select skills to install (all selected by default)"
+                }
+              );
+              if (!picks || picks.length === 0) {
+                return;
+              }
+              selectedSkillNames = picks.map((p) => p.label);
+            }
+          } catch {
+            // discovery failed — proceed without multiselect, install all
+          }
+        }
+
+        // Pre-flight security audit — runs before scope picker so user decides on security first
+        let skipAudit = false;
         try {
-          let auditResults = await vscode.window.withProgress(
+          const auditResults = await vscode.window.withProgress(
             {
               location: vscode.ProgressLocation.Notification,
               title: `Checking security for "${label}"…`
             },
             () => client.preInstallAudit(source, skillName)
           );
-
-          // When a source contains multiple skills and none was pre-selected,
-          // let the user pick which ones to install.
-          if (auditResults.length > 1 && !skillName) {
-            const picks = await vscode.window.showQuickPick(
-              auditResults.map((r) => {
-                const issueCount = (r.audits ?? []).filter(
-                  (a) => a.status === "warn" || a.status === "fail"
-                ).length;
-                return {
-                  label: r.name,
-                  description:
-                    issueCount > 0
-                      ? `⚠ ${issueCount} security issue${issueCount > 1 ? "s" : ""}`
-                      : undefined,
-                  picked: true
-                };
-              }),
-              {
-                canPickMany: true,
-                title: `Skills available in "${label}"`,
-                placeHolder: "Select skills to install (all selected by default)"
-              }
-            );
-            if (!picks || picks.length === 0) {
-              return;
-            }
-            selectedSkillNames = picks.map((p) => p.label);
-            auditResults = auditResults.filter((r) =>
-              selectedSkillNames!.includes(r.name)
-            );
-          }
-
           const issues = auditResults.flatMap((r) =>
             (r.audits ?? []).filter(
               (a) => a.status === "warn" || a.status === "fail"

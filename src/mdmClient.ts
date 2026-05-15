@@ -239,7 +239,7 @@ export class MdmClient {
 
   async listRemoteSkills(source: string): Promise<RemoteSkillEntry[]> {
     const parse = (text: string): RemoteSkillEntry[] =>
-      assertJsonArray(stripAnsi(text), isRemoteSkillEntry, "skills find --source");
+      assertJsonArray(text, isRemoteSkillEntry, "skills find --source");
     try {
       const { stdout } = await execFileAsync(
         this.cliPath,

@@ -238,12 +238,22 @@ export class MdmClient {
   }
 
   async listRemoteSkills(source: string): Promise<RemoteSkillEntry[]> {
-    const { stdout } = await execFileAsync(
-      this.cliPath,
-      ["skills", "find", "--source", source, "--json"],
-      { timeout: 15_000, cwd: this.workspaceRoot }
-    );
-    return assertJsonArray(stdout, isRemoteSkillEntry, "skills find --source");
+    const parse = (text: string): RemoteSkillEntry[] =>
+      assertJsonArray(text, isRemoteSkillEntry, "skills find --source");
+    try {
+      const { stdout } = await execFileAsync(
+        this.cliPath,
+        ["skills", "find", "--source", source, "--json"],
+        { timeout: 15_000, cwd: this.workspaceRoot }
+      );
+      return parse(stdout);
+    } catch (err) {
+      const stdout = (err as Record<string, unknown>)["stdout"];
+      if (typeof stdout === "string" && stdout.trim()) {
+        return parse(stdout);
+      }
+      throw err;
+    }
   }
 
   async auditSkills(scope?: MdmScope): Promise<AuditResult[]> {

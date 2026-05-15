@@ -178,8 +178,11 @@ export function activate(context: vscode.ExtensionContext): void {
               }
               selectedSkillNames = picks.map((p) => p.label);
             }
-          } catch {
-            // discovery failed — proceed without multiselect, install all
+          } catch (err) {
+            void vscode.window.showErrorMessage(
+              `Failed to list skills from "${label}": ${formatError(err)}`
+            );
+            return;
           }
         }
 

@@ -32,6 +32,11 @@ export interface FindSkillResult {
   repo?: string;
 }
 
+export interface RemoteSkillEntry {
+  name: string;
+  description?: string;
+}
+
 export interface AuditProvider {
   provider: string;
   slug?: string;
@@ -232,6 +237,25 @@ export class MdmClient {
     return assertJsonArray(stdout, isFindSkillResult, "skills find");
   }
 
+  async listRemoteSkills(source: string): Promise<RemoteSkillEntry[]> {
+    const parse = (text: string): RemoteSkillEntry[] =>
+      assertJsonArray(text, isRemoteSkillEntry, "skills find --source");
+    try {
+      const { stdout } = await execFileAsync(
+        this.cliPath,
+        ["skills", "find", "--source", source, "--json"],
+        { timeout: 15_000, cwd: this.workspaceRoot }
+      );
+      return parse(stdout);
+    } catch (err) {
+      const stdout = (err as Record<string, unknown>)["stdout"];
+      if (typeof stdout === "string" && stdout.trim()) {
+        return parse(stdout);
+      }
+      throw err;
+    }
+  }
+
   async auditSkills(scope?: MdmScope): Promise<AuditResult[]> {
     const args = ["skills", "audit", "--json"];
     if (scope === "global") {
@@ -406,6 +430,13 @@ function isKnownAgent(v: unknown): v is KnownAgent {
   }
   const o = v as Record<string, unknown>;
   return typeof o["name"] === "string" && typeof o["displayName"] === "string";
+}
+
+function isRemoteSkillEntry(v: unknown): v is RemoteSkillEntry {
+  if (typeof v !== "object" || v === null) {
+    return false;
+  }
+  return typeof (v as Record<string, unknown>)["name"] === "string";
 }
 
 function isFindSkillResult(v: unknown): v is FindSkillResult {

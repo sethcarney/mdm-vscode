@@ -148,7 +148,46 @@ export function activate(context: vscode.ExtensionContext): void {
           skillName = undefined;
         }
 
-        // Pre-flight audit — runs before scope picker so user decides on security first
+        // Discover available skills so the user can pick a subset before installing.
+        // Only runs for URL/path sources where no specific skill was pre-selected.
+        let selectedSkillNames: string[] | undefined;
+        if (!skillName) {
+          try {
+            const remoteSkills = await vscode.window.withProgress(
+              {
+                location: vscode.ProgressLocation.Notification,
+                title: `Fetching skills from "${label}"…`
+              },
+              () => client.listRemoteSkills(source)
+            );
+            if (remoteSkills.length > 1) {
+              const picks = await vscode.window.showQuickPick(
+                remoteSkills.map((s) => ({
+                  label: s.name,
+                  description: s.description || undefined,
+                  picked: true
+                })),
+                {
+                  canPickMany: true,
+                  title: `Skills available in "${label}"`,
+                  placeHolder:
+                    "Select skills to install (all selected by default)"
+                }
+              );
+              if (!picks || picks.length === 0) {
+                return;
+              }
+              selectedSkillNames = picks.map((p) => p.label);
+            }
+          } catch (err) {
+            void vscode.window.showErrorMessage(
+              `Failed to list skills from "${label}": ${formatError(err)}`
+            );
+            return;
+          }
+        }
+
+        // Pre-flight security audit — runs before scope picker so user decides on security first
         let skipAudit = false;
         try {
           const auditResults = await vscode.window.withProgress(
@@ -201,16 +240,36 @@ export function activate(context: vscode.ExtensionContext): void {
           return;
         }
 
-        const ok = await installSkillWithRetry(
-          client,
-          source,
-          resolvedScope,
-          label,
-          skillName,
-          skipAudit
-        );
-        if (ok) {
-          skillsProvider.refresh();
+        if (selectedSkillNames) {
+          let anyInstalled = false;
+          for (const sn of selectedSkillNames) {
+            const ok = await installSkillWithRetry(
+              client,
+              source,
+              resolvedScope,
+              sn,
+              sn,
+              skipAudit
+            );
+            if (ok) {
+              anyInstalled = true;
+            }
+          }
+          if (anyInstalled) {
+            skillsProvider.refresh();
+          }
+        } else {
+          const ok = await installSkillWithRetry(
+            client,
+            source,
+            resolvedScope,
+            label,
+            skillName,
+            skipAudit
+          );
+          if (ok) {
+            skillsProvider.refresh();
+          }
         }
       }
     ),

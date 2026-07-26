@@ -13,3 +13,18 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    groups:
+      # All sub-paths must be pinned to the same SHA, so no update-types
+      # filter here — majors have to move together too.
+      codeql-action:
+        patterns:
+          - "github/codeql-action*"
+      # Noise reduction only; majors still get individual PRs.
+      actions:
+        patterns:
+          - "*"
+        exclude-patterns:
+          - "github/codeql-action*"
+        update-types:
+          - minor
+          - patch

@@ -5,6 +5,15 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    ignore:
+      # typescript-eslint's peer range is `>=4.8.4 <6.1.0`, so TS 7 breaks
+      # `bun run lint` outright ("typescript-eslint does not support TS 7.0").
+      # TS 7.0 ships no stable programmatic API — that lands in 7.1 — and
+      # upstream tracks support in typescript-eslint#10940. Drop this ignore
+      # once a typescript-eslint release accepts TS 7.
+      - dependency-name: typescript
+        versions:
+          - ">= 7"
     groups:
       dev-dependencies:
         dependency-type: development

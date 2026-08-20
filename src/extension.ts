@@ -39,9 +39,9 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.StatusBarAlignment.Right,
     100
   );
-  doctorStatusBar.command = "mdm.doctor";
-  doctorStatusBar.text = "$(pulse) MDM";
-  doctorStatusBar.tooltip = "Run MDM Doctor";
+  doctorStatusBar.command = "mdm.menu";
+  doctorStatusBar.text = "$(tools) MDM";
+  doctorStatusBar.tooltip = "MDM quick actions";
   doctorStatusBar.show();
   context.subscriptions.push(doctorStatusBar);
 
@@ -154,6 +154,172 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("mdm.migrate", () =>
       offerMigration(client, outputChannel, { manual: true })
     ),
+
+    // Public, palette-visible entry points. The sidebar-internal commands
+    // already prompt for anything a tree context would have provided, so
+    // these are thin aliases that make every action reachable by name.
+    vscode.commands.registerCommand("mdm.findSkill", () =>
+      vscode.commands.executeCommand("_mdm.findSkill#sideBar")
+    ),
+    vscode.commands.registerCommand("mdm.updateAllSkills", () =>
+      vscode.commands.executeCommand("_mdm.updateAllSkills#sideBar")
+    ),
+    vscode.commands.registerCommand("mdm.auditSkills", () =>
+      vscode.commands.executeCommand("_mdm.auditSkills#sideBar")
+    ),
+    vscode.commands.registerCommand("mdm.addAgent", () =>
+      vscode.commands.executeCommand("_mdm.addAgent#sideBar")
+    ),
+    vscode.commands.registerCommand("mdm.linkRules", () =>
+      vscode.commands.executeCommand("_mdm.rulesLinkAgent#sideBar")
+    ),
+
+    vscode.commands.registerCommand("mdm.addKnowledge", async () => {
+      const source = await vscode.window.showInputBox({
+        title: "Add Knowledge Bundle",
+        prompt: "GitHub repo (owner/repo), URL, or local path of an OKF bundle",
+        placeHolder: "acme/sales-knowledge or ./knowledge-src"
+      });
+      if (!source) {
+        return;
+      }
+      try {
+        await vscode.window.withProgress(
+          {
+            location: vscode.ProgressLocation.Notification,
+            title: `Installing knowledge bundle from ${source}…`
+          },
+          () => client.addKnowledge(source)
+        );
+        knowledgeProvider.refresh();
+      } catch (err) {
+        void vscode.window.showErrorMessage(
+          `Failed to add knowledge bundle: ${formatError(err)}`
+        );
+      }
+    }),
+
+    vscode.commands.registerCommand("mdm.addPlugin", async () => {
+      const source = await vscode.window.showInputBox({
+        title: "Add Plugin",
+        prompt:
+          "GitHub repo (owner/repo), URL, or local path of an Agent Plugin",
+        placeHolder: "acme/toolkit or ./my-plugin"
+      });
+      if (!source) {
+        return;
+      }
+      let agents: string[];
+      try {
+        const known = await client.listAvailableAgents();
+        const picked = await vscode.window.showQuickPick(
+          known.map((a) => ({
+            label: a.displayName,
+            description: a.name,
+            picked: a.installed
+          })),
+          {
+            title: "Install plugin for which agents?",
+            canPickMany: true
+          }
+        );
+        if (!picked || picked.length === 0) {
+          return;
+        }
+        agents = picked.map((p) => p.description);
+      } catch (err) {
+        void vscode.window.showErrorMessage(formatError(err));
+        return;
+      }
+      try {
+        await vscode.window.withProgress(
+          {
+            location: vscode.ProgressLocation.Notification,
+            title: `Installing plugin from ${source}…`
+          },
+          () => client.addPlugin(source, agents)
+        );
+        pluginsProvider.refresh();
+        skillsProvider.refresh();
+      } catch (err) {
+        void vscode.window.showErrorMessage(
+          `Failed to add plugin: ${formatError(err)}`
+        );
+      }
+    }),
+
+    vscode.commands.registerCommand("mdm.installKnowledge", async () => {
+      try {
+        await vscode.window.withProgress(
+          {
+            location: vscode.ProgressLocation.Notification,
+            title: "Restoring knowledge bundles from lock…"
+          },
+          () => client.installKnowledge()
+        );
+        knowledgeProvider.refresh();
+      } catch (err) {
+        void vscode.window.showErrorMessage(formatError(err));
+      }
+    }),
+
+    vscode.commands.registerCommand("mdm.installPlugins", async () => {
+      try {
+        await vscode.window.withProgress(
+          {
+            location: vscode.ProgressLocation.Notification,
+            title: "Restoring plugins from lock…"
+          },
+          () => client.installPlugins()
+        );
+        pluginsProvider.refresh();
+        skillsProvider.refresh();
+      } catch (err) {
+        void vscode.window.showErrorMessage(formatError(err));
+      }
+    }),
+
+    // One command that restores everything the lock records — skills,
+    // knowledge bundles, and plugins — the onboarding path in one click.
+    vscode.commands.registerCommand("mdm.restoreProject", async () => {
+      try {
+        await vscode.window.withProgress(
+          {
+            location: vscode.ProgressLocation.Notification,
+            title: "Restoring project from mdm-lock.json…"
+          },
+          async (progress) => {
+            progress.report({ message: "skills" });
+            await client.installSkills();
+            progress.report({ message: "knowledge bundles" });
+            await client.installKnowledge();
+            progress.report({ message: "plugins" });
+            await client.installPlugins();
+          }
+        );
+        void vscode.commands.executeCommand("mdm.refreshAll");
+      } catch (err) {
+        void vscode.window.showErrorMessage(
+          `Restore failed: ${formatError(err)}`
+        );
+      }
+    }),
+
+    vscode.commands.registerCommand("mdm.openLockFile", async () => {
+      const lockPath = await client.projectLockPath();
+      if (!lockPath) {
+        void vscode.window.showInformationMessage(
+          "No mdm-lock.json in this workspace yet — install a skill to create one."
+        );
+        return;
+      }
+      await vscode.commands.executeCommand(
+        "vscode.open",
+        vscode.Uri.file(lockPath)
+      );
+    }),
+
+    vscode.commands.registerCommand("mdm.menu", () => showQuickMenu(client)),
 
     vscode.commands.registerCommand("mdm.doctor", async () => {
       try {
@@ -790,9 +956,101 @@ export function activate(context: vscode.ExtensionContext): void {
   lockWatcher.onDidDelete(onLockChange);
   context.subscriptions.push(lockWatcher);
 
+  const refreshContexts = (): void => {
+    void updateViewContexts(client);
+  };
+  refreshContexts();
+  lockWatcher.onDidChange(refreshContexts);
+  lockWatcher.onDidCreate(refreshContexts);
+  lockWatcher.onDidDelete(refreshContexts);
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration((e) => {
+      if (e.affectsConfiguration("mdm.cliPath")) {
+        refreshContexts();
+      }
+    })
+  );
+
   checkCliAndWarn(client);
   void checkCliVersionAlignment(client);
   void offerMigration(client, outputChannel, { manual: false });
+}
+
+/**
+ * Context keys the viewsWelcome contributions key off: whether the CLI is
+ * reachable, and whether the project has a lock file to restore from.
+ */
+async function updateViewContexts(client: MdmClient): Promise<void> {
+  const [installed, hasLock] = await Promise.all([
+    client.checkInstalled(),
+    client.hasProjectLockFile()
+  ]);
+  await Promise.all([
+    vscode.commands.executeCommand("setContext", "mdm.cliMissing", !installed),
+    vscode.commands.executeCommand(
+      "setContext",
+      "mdm.projectLockPresent",
+      hasLock
+    )
+  ]);
+}
+
+interface QuickMenuEntry extends vscode.QuickPickItem {
+  command?: string;
+}
+
+/**
+ * The status-bar hub: every mdm action, one click away, grouped the way
+ * the CLI groups them. Each entry defers to the same command the views
+ * and palette use.
+ */
+async function showQuickMenu(client: MdmClient): Promise<void> {
+  const installed = await client.checkInstalled();
+  if (!installed) {
+    const action = await vscode.window.showErrorMessage(
+      "MDM CLI not found. Install it and make sure it is in your PATH, or set mdm.cliPath.",
+      "Configure Path"
+    );
+    if (action === "Configure Path") {
+      void vscode.commands.executeCommand(
+        "workbench.action.openSettings",
+        "mdm.cliPath"
+      );
+    }
+    return;
+  }
+  const entries: QuickMenuEntry[] = [
+    { label: "Skills", kind: vscode.QuickPickItemKind.Separator },
+    {
+      label: "$(search) Find & install a skill",
+      command: "mdm.findSkill"
+    },
+    { label: "$(sync) Update all skills", command: "mdm.updateAllSkills" },
+    { label: "$(shield) Audit skills", command: "mdm.auditSkills" },
+    { label: "Knowledge & Plugins", kind: vscode.QuickPickItemKind.Separator },
+    { label: "$(book) Add knowledge bundle", command: "mdm.addKnowledge" },
+    { label: "$(plug) Add plugin", command: "mdm.addPlugin" },
+    { label: "Agents & Rules", kind: vscode.QuickPickItemKind.Separator },
+    { label: "$(add) Add agent", command: "mdm.addAgent" },
+    { label: "$(link) Link agent rules", command: "mdm.linkRules" },
+    { label: "Project", kind: vscode.QuickPickItemKind.Separator },
+    {
+      label: "$(cloud-download) Restore project from lock",
+      description: "skills + knowledge + plugins",
+      command: "mdm.restoreProject"
+    },
+    { label: "$(pulse) Run doctor", command: "mdm.doctor" },
+    { label: "$(arrow-right) Migrate v1 lock files", command: "mdm.migrate" },
+    { label: "$(go-to-file) Open mdm-lock.json", command: "mdm.openLockFile" },
+    { label: "$(refresh) Refresh all views", command: "mdm.refreshAll" }
+  ];
+  const picked = await vscode.window.showQuickPick(entries, {
+    title: "MDM",
+    placeHolder: "Pick an action"
+  });
+  if (picked?.command) {
+    void vscode.commands.executeCommand(picked.command);
+  }
 }
 
 /**

@@ -448,6 +448,56 @@ export class MdmClient {
     });
   }
 
+  async addKnowledge(source: string): Promise<void> {
+    await execFileAsync(this.cliPath, ["knowledge", "add", source, "-y"], {
+      timeout: 120_000,
+      cwd: this.workspaceRoot
+    });
+  }
+
+  async addPlugin(source: string, agents: string[]): Promise<void> {
+    const args = ["plugins", "add", source, "-y"];
+    for (const agent of agents) {
+      args.push("-a", agent);
+    }
+    await execFileAsync(this.cliPath, args, {
+      timeout: 120_000,
+      cwd: this.workspaceRoot
+    });
+  }
+
+  async installKnowledge(): Promise<void> {
+    await execFileAsync(this.cliPath, ["knowledge", "install"], {
+      timeout: 120_000,
+      cwd: this.workspaceRoot
+    });
+  }
+
+  async installPlugins(): Promise<void> {
+    await execFileAsync(this.cliPath, ["plugins", "install"], {
+      timeout: 120_000,
+      cwd: this.workspaceRoot
+    });
+  }
+
+  /** The project lock file on disk, preferring mdm-lock.json. */
+  async projectLockPath(): Promise<string | undefined> {
+    const root = this.workspaceRoot;
+    if (!root) {
+      return undefined;
+    }
+    for (const name of ["mdm-lock.json", "skills-lock.json"]) {
+      const candidate = path.join(root, name);
+      try {
+        await access(candidate);
+        return candidate;
+      } catch {
+        // keep looking
+      }
+    }
+    return undefined;
+  }
+
   async runDoctor(): Promise<string> {
     const { stdout } = await execFileAsync(this.cliPath, ["doctor"], {
       timeout: 30_000,

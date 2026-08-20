@@ -79,6 +79,63 @@
         }
       ]
     },
+    "viewsWelcome": [
+      {
+        "view": "mdmSkills",
+        "when": "mdm.cliMissing",
+        "contents": "The mdm CLI was not found on this machine.\n[Configure CLI Path](command:workbench.action.openSettings?%22mdm.cliPath%22)\nOr install it — see the [installation guide](https://github.com/sethcarney/mdm#installation) — then reload the window."
+      },
+      {
+        "view": "mdmSkills",
+        "when": "!mdm.cliMissing && mdm.projectLockPresent",
+        "contents": "No skills installed yet, but this project has a lock file.\n[Restore Project from Lock](command:mdm.restoreProject)\n[Find Skills](command:mdm.findSkill)"
+      },
+      {
+        "view": "mdmSkills",
+        "when": "!mdm.cliMissing && !mdm.projectLockPresent",
+        "contents": "No skills installed yet.\n[Find Skills](command:mdm.findSkill)\nSkills are reusable markdown instructions installed for your AI agents."
+      },
+      {
+        "view": "mdmAgents",
+        "when": "mdm.cliMissing",
+        "contents": "mdm CLI not found — see the Skills view."
+      },
+      {
+        "view": "mdmAgents",
+        "when": "!mdm.cliMissing",
+        "contents": "No agents configured.\n[Add Agent](command:mdm.addAgent)\nConfigured agents are the default install targets for skills."
+      },
+      {
+        "view": "mdmRules",
+        "when": "mdm.cliMissing",
+        "contents": "mdm CLI not found — see the Skills view."
+      },
+      {
+        "view": "mdmRules",
+        "when": "!mdm.cliMissing",
+        "contents": "No rules linked yet.\n[Link Agent Rules](command:mdm.linkRules)\nLinking points every agent's instruction file (CLAUDE.md, .cursorrules, …) at a single AGENTS.md."
+      },
+      {
+        "view": "mdmKnowledge",
+        "when": "mdm.cliMissing",
+        "contents": "mdm CLI not found — see the Skills view."
+      },
+      {
+        "view": "mdmKnowledge",
+        "when": "!mdm.cliMissing",
+        "contents": "No knowledge bundles installed.\n[Add Knowledge Bundle](command:mdm.addKnowledge)\nKnowledge bundles are OKF markdown reference sets for AI agents."
+      },
+      {
+        "view": "mdmPlugins",
+        "when": "mdm.cliMissing",
+        "contents": "mdm CLI not found — see the Skills view."
+      },
+      {
+        "view": "mdmPlugins",
+        "when": "!mdm.cliMissing",
+        "contents": "No plugins installed.\n[Add Plugin](command:mdm.addPlugin)\nAgent Plugins bundle skills and MCP servers in one installable package."
+      }
+    ],
     "commands": [
       {
         "command": "_mdm.refreshSkills#sideBar",
@@ -203,6 +260,77 @@
         "category": "MDM",
         "title": "Migrate v1 Lock Files",
         "icon": "$(arrow-right)"
+      },
+      {
+        "command": "mdm.findSkill",
+        "category": "MDM",
+        "title": "Find & Install Skill",
+        "icon": "$(search)"
+      },
+      {
+        "command": "mdm.updateAllSkills",
+        "category": "MDM",
+        "title": "Update All Skills",
+        "icon": "$(sync)"
+      },
+      {
+        "command": "mdm.auditSkills",
+        "category": "MDM",
+        "title": "Audit Skills",
+        "icon": "$(shield)"
+      },
+      {
+        "command": "mdm.addAgent",
+        "category": "MDM",
+        "title": "Add Agent",
+        "icon": "$(add)"
+      },
+      {
+        "command": "mdm.linkRules",
+        "category": "MDM",
+        "title": "Link Agent Rules",
+        "icon": "$(link)"
+      },
+      {
+        "command": "mdm.addKnowledge",
+        "category": "MDM",
+        "title": "Add Knowledge Bundle",
+        "icon": "$(add)"
+      },
+      {
+        "command": "mdm.addPlugin",
+        "category": "MDM",
+        "title": "Add Plugin",
+        "icon": "$(add)"
+      },
+      {
+        "command": "mdm.installKnowledge",
+        "category": "MDM",
+        "title": "Install Configured Knowledge Bundles",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "mdm.installPlugins",
+        "category": "MDM",
+        "title": "Install Configured Plugins",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "mdm.restoreProject",
+        "category": "MDM",
+        "title": "Restore Project from Lock (skills + knowledge + plugins)",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "mdm.openLockFile",
+        "category": "MDM",
+        "title": "Open mdm-lock.json",
+        "icon": "$(go-to-file)"
+      },
+      {
+        "command": "mdm.menu",
+        "category": "MDM",
+        "title": "Quick Actions"
       }
     ],
     "menus": {
@@ -325,14 +453,59 @@
           "group": "navigation@2"
         },
         {
+          "command": "mdm.addKnowledge",
+          "when": "view == mdmKnowledge",
+          "group": "navigation@1"
+        },
+        {
           "command": "_mdm.refreshKnowledge#sideBar",
           "when": "view == mdmKnowledge",
+          "group": "navigation@2"
+        },
+        {
+          "command": "mdm.addPlugin",
+          "when": "view == mdmPlugins",
           "group": "navigation@1"
         },
         {
           "command": "_mdm.refreshPlugins#sideBar",
           "when": "view == mdmPlugins",
-          "group": "navigation@1"
+          "group": "navigation@2"
+        },
+        {
+          "command": "mdm.installSkills",
+          "when": "view == mdmSkills",
+          "group": "1_actions@1"
+        },
+        {
+          "command": "mdm.auditSkills",
+          "when": "view == mdmSkills",
+          "group": "1_actions@2"
+        },
+        {
+          "command": "mdm.restoreProject",
+          "when": "view == mdmSkills",
+          "group": "2_project@1"
+        },
+        {
+          "command": "mdm.migrate",
+          "when": "view == mdmSkills",
+          "group": "2_project@2"
+        },
+        {
+          "command": "mdm.openLockFile",
+          "when": "view == mdmSkills",
+          "group": "2_project@3"
+        },
+        {
+          "command": "mdm.installKnowledge",
+          "when": "view == mdmKnowledge",
+          "group": "1_actions@1"
+        },
+        {
+          "command": "mdm.installPlugins",
+          "when": "view == mdmPlugins",
+          "group": "1_actions@1"
         }
       ],
       "view/item/context": [

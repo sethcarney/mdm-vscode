@@ -21,9 +21,12 @@ Manage your markdown-driven Skills, Knowledge bundles, Plugins, Agents, and Rule
 - **Agent management** - add and remove configured agents per scope; warns when an agent's rules file isn't linked
 - **Rules management** - link / unlink agent rule files to `AGENTS.md` from the sidebar
 - **v1 → v2 migration** - detects v1 lock files and offers to run `mdm migrate`, with a keep-tombstone / delete choice and a dry-run plan (`MDM: Migrate v1 Lock Files` in the palette)
-- **Doctor in the status bar** - one-click `$(pulse) MDM` button to run `mdm doctor` and stream output to a channel
+- **Quick-actions hub** - the `MDM` status-bar button opens a menu with every command: find/update/audit skills, add knowledge or plugins, add agents, link rules, restore the project, doctor, and migration
+- **One-click onboarding** - `MDM: Restore Project from Lock` runs skills + knowledge + plugins install in one go; empty views offer it directly
+- **Welcome views** - every empty section explains itself and offers the relevant action as a button; a missing CLI shows setup guidance instead of an error row
 - **Live data** - views refresh automatically when any mdm lock file changes on disk, plus per-section refresh buttons
 - **Copy name** context menu action on any item
+- **Command palette parity** - every action is also a palette command under the `MDM:` category
 - **Graceful error handling** - shows a clear message and settings shortcut when the CLI is not found
 
 ## Requirements

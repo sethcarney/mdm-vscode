@@ -141,11 +141,27 @@ export class MdmTreeProvider implements vscode.TreeDataProvider<MdmTreeItem> {
 
     const installed = await this.client.checkInstalled();
     if (!installed) {
-      return [errorItem("MDM CLI not found — check mdm.cliPath in settings")];
+      // Empty tree — the view's viewsWelcome content explains and links out.
+      return [];
     }
 
-    // Root level — always show both scope headers
+    // Root level — scope headers, unless there is nothing at all to show
+    // (an empty tree lets the view's welcome content render instead).
     if (!element) {
+      try {
+        const items = await this.fetchItems();
+        if (
+          items.length === 0 &&
+          !(
+            this.resource === "skills" &&
+            (await this.client.hasProjectLockFile())
+          )
+        ) {
+          return [];
+        }
+      } catch (err) {
+        return [errorItem(err instanceof Error ? err.message : String(err))];
+      }
       return [
         new MdmTreeItem("Global", vscode.TreeItemCollapsibleState.Expanded, {
           kind: "scope-header",
@@ -325,12 +341,8 @@ export class MdmRulesTreeProvider implements vscode.TreeDataProvider<MdmRulesIte
 
     const installed = await this.client.checkInstalled();
     if (!installed) {
-      return [
-        rulesMessageItem(
-          "MDM CLI not found — check mdm.cliPath in settings",
-          true
-        )
-      ];
+      // Empty tree — the view's viewsWelcome content explains and links out.
+      return [];
     }
 
     let entries: RulesEntry[];
@@ -345,11 +357,8 @@ export class MdmRulesTreeProvider implements vscode.TreeDataProvider<MdmRulesIte
     const visible = entries.filter((e) => e.state === "linked");
 
     if (visible.length === 0) {
-      return [
-        rulesMessageItem(
-          "No rules linked — use the link button above to add one"
-        )
-      ];
+      // Empty tree — the view's viewsWelcome content offers the link action.
+      return [];
     }
 
     return visible.map(
@@ -491,18 +500,15 @@ export class MdmLockSectionTreeProvider implements vscode.TreeDataProvider<MdmLo
     if (element) {
       return [];
     }
+    if (!(await this.client.checkInstalled())) {
+      return [];
+    }
     try {
       const sections = await this.client.readProjectLockSections();
       const entries = sections[this.section];
       if (entries.length === 0) {
-        return [
-          new MdmLockSectionItem(
-            this.section === "knowledge"
-              ? "No knowledge bundles installed"
-              : "No plugins installed",
-            { kind: "message" }
-          )
-        ];
+        // Empty tree — the view's viewsWelcome content offers the add action.
+        return [];
       }
       return entries.map(
         (entry) =>

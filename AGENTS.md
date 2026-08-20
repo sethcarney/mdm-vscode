@@ -33,14 +33,14 @@ The extension is three TypeScript files under `src/`:
 
 **`mdmTreeProvider.ts`** — two tree provider classes.
 
-- `MdmTreeProvider` powers the **Skills** and **Agents** panels: two-level tree with `Global` / `Project` scope headers expanding into `MdmTreeItem` leaf nodes. `contextValue` (`mdm-skill`, `mdm-agent`, `mdm-{skills,agents}-scope-{global,project}`) drives the inline buttons declared in `package.json` menus. Results are cached in `_itemsPromise` and cleared on `refresh()`. If the Skills/Project header has no children but a `skills-lock.json` exists, an inline "Install configured project skills" action is rendered.
+- `MdmTreeProvider` powers the **Skills** and **Agents** panels: two-level tree with `Global` / `Project` scope headers expanding into `MdmTreeItem` leaf nodes. `contextValue` (`mdm-skill`, `mdm-agent`, `mdm-{skills,agents}-scope-{global,project}`) drives the inline buttons declared in `package.json` menus. Results are cached in `_itemsPromise` and cleared on `refresh()`. If the Skills/Project header has no children but a project lock file (`mdm-lock.json`, or a v1 `skills-lock.json`) exists, an inline "Install configured project skills" action is rendered. `MdmLockSectionTreeProvider` powers the flat **Knowledge** and **Plugins** panels from the lock sections `MdmClient.readProjectLockSections()` returns.
 - `MdmRulesTreeProvider` powers the **Rules** panel: a flat list of `linked`-state entries. `missing` entries are exposed only via the title-bar "Link Agent Rules" action. Items with a `filePath` open via the `vscode.open` command on click.
 
 Both providers debounce refresh by ~100ms and dispose their `EventEmitter` and pending timers on extension shutdown.
 
-**`extension.ts`** — wires the three providers (`skillsProvider`, `agentsProvider`, `rulesProvider`) and a persistent status bar item (`$(pulse) MDM`) that runs `mdm.doctor` on click. Registers all commands. Long-running commands use `vscode.window.withProgress` for a notification spinner. Destructive commands show a modal confirmation before calling the client. Shared helpers (`pickScope`, `pickScopeOrAll`, `formatError`) live at the bottom of the file. `installSkillWithRetry` handles the install flow's two retryable CLI errors (`audit-blocked`, `allow-hidden-chars`) with their own confirmation prompts.
+**`extension.ts`** — wires the five providers (`skillsProvider`, `agentsProvider`, `rulesProvider`, `knowledgeProvider`, `pluginsProvider`) and a persistent status bar item (`$(pulse) MDM`) that runs `mdm.doctor` on click. Registers all commands. Long-running commands use `vscode.window.withProgress` for a notification spinner. Destructive commands show a modal confirmation before calling the client. Shared helpers (`pickScope`, `pickScopeOrAll`, `formatError`) live at the bottom of the file. `installSkillWithRetry` handles the install flow's two retryable CLI errors (`audit-blocked`, `allow-hidden-chars`) with their own confirmation prompts.
 
-On configuration change (`mdm.cliPath`), the client's install-check cache is cleared and all three views refresh.
+On configuration change (`mdm.cliPath`) and whenever any mdm lock file changes on disk (a `FileSystemWatcher` covers `mdm-lock.json` and the v1 names), all views refresh. On activation the extension checks major-version alignment with the CLI (`SUPPORTED_CLI_MAJOR`) and offers `mdm migrate` when v1 lock files are present.
 
 ## Key constraints
 

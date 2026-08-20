@@ -2,11 +2,20 @@ import * as path from "path";
 import * as vscode from "vscode";
 import { MdmClient, MdmScope, stripAnsi } from "./mdmClient";
 import {
+  MdmLockSectionItem,
+  MdmLockSectionTreeProvider,
   MdmRulesItem,
   MdmRulesTreeProvider,
   MdmTreeItem,
   MdmTreeProvider
 } from "./mdmTreeProvider";
+
+/**
+ * The CLI major this extension targets. The extension and the CLI are
+ * version-aligned at the major: extension 2.x drives mdm 2.x. Minors and
+ * patches move independently on each side.
+ */
+const SUPPORTED_CLI_MAJOR = 2;
 
 export function activate(context: vscode.ExtensionContext): void {
   const client = new MdmClient();
@@ -16,7 +25,15 @@ export function activate(context: vscode.ExtensionContext): void {
   const skillsProvider = new MdmTreeProvider(client, "skills");
   const agentsProvider = new MdmTreeProvider(client, "agents");
   const rulesProvider = new MdmRulesTreeProvider(client);
-  context.subscriptions.push(skillsProvider, agentsProvider, rulesProvider);
+  const knowledgeProvider = new MdmLockSectionTreeProvider(client, "knowledge");
+  const pluginsProvider = new MdmLockSectionTreeProvider(client, "plugins");
+  context.subscriptions.push(
+    skillsProvider,
+    agentsProvider,
+    rulesProvider,
+    knowledgeProvider,
+    pluginsProvider
+  );
 
   const doctorStatusBar = vscode.window.createStatusBarItem(
     vscode.StatusBarAlignment.Right,
@@ -41,6 +58,12 @@ export function activate(context: vscode.ExtensionContext): void {
       treeDataProvider: rulesProvider,
       showCollapseAll: true
     }),
+    vscode.window.createTreeView("mdmKnowledge", {
+      treeDataProvider: knowledgeProvider
+    }),
+    vscode.window.createTreeView("mdmPlugins", {
+      treeDataProvider: pluginsProvider
+    }),
 
     vscode.commands.registerCommand("_mdm.refreshSkills#sideBar", () =>
       skillsProvider.refresh()
@@ -52,10 +75,85 @@ export function activate(context: vscode.ExtensionContext): void {
       rulesProvider.refresh()
     ),
     vscode.commands.registerCommand("mdm.refreshAll", () => {
+      client.clearCache();
       skillsProvider.refresh();
       agentsProvider.refresh();
       rulesProvider.refresh();
+      knowledgeProvider.refresh();
+      pluginsProvider.refresh();
     }),
+    vscode.commands.registerCommand("_mdm.refreshKnowledge#sideBar", () =>
+      knowledgeProvider.refresh()
+    ),
+    vscode.commands.registerCommand("_mdm.refreshPlugins#sideBar", () =>
+      pluginsProvider.refresh()
+    ),
+
+    vscode.commands.registerCommand(
+      "_mdm.updateKnowledge#sideBar",
+      (item: MdmLockSectionItem) =>
+        runLockSectionAction(item, `Updating ${item.entry?.name}…`, (name) =>
+          client.updateKnowledge(name)
+        ).then(() => knowledgeProvider.refresh())
+    ),
+    vscode.commands.registerCommand(
+      "_mdm.deleteKnowledge#sideBar",
+      async (item: MdmLockSectionItem) => {
+        const name = item.entry?.name;
+        if (!name) {
+          return;
+        }
+        const confirmed = await vscode.window.showWarningMessage(
+          `Remove knowledge bundle "${name}"?`,
+          { modal: true },
+          "Remove"
+        );
+        if (confirmed !== "Remove") {
+          return;
+        }
+        await runLockSectionAction(item, `Removing ${name}…`, (n) =>
+          client.removeKnowledge(n)
+        );
+        knowledgeProvider.refresh();
+      }
+    ),
+    vscode.commands.registerCommand(
+      "_mdm.updatePlugin#sideBar",
+      (item: MdmLockSectionItem) =>
+        runLockSectionAction(item, `Updating ${item.entry?.name}…`, (name) =>
+          client.updatePlugin(name)
+        ).then(() => {
+          pluginsProvider.refresh();
+          skillsProvider.refresh();
+        })
+    ),
+    vscode.commands.registerCommand(
+      "_mdm.deletePlugin#sideBar",
+      async (item: MdmLockSectionItem) => {
+        const name = item.entry?.name;
+        if (!name) {
+          return;
+        }
+        const choice = await vscode.window.showWarningMessage(
+          `Remove plugin "${name}"? Its skills are unlinked and its MCP servers unwired.`,
+          { modal: true },
+          "Remove (keep data)",
+          "Remove & purge data"
+        );
+        if (!choice) {
+          return;
+        }
+        await runLockSectionAction(item, `Removing ${name}…`, (n) =>
+          client.removePlugin(n, choice === "Remove & purge data")
+        );
+        pluginsProvider.refresh();
+        skillsProvider.refresh();
+      }
+    ),
+
+    vscode.commands.registerCommand("mdm.migrate", () =>
+      offerMigration(client, outputChannel, { manual: true })
+    ),
 
     vscode.commands.registerCommand("mdm.doctor", async () => {
       try {
@@ -674,14 +772,142 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.workspace.onDidChangeConfiguration((e) => {
       if (e.affectsConfiguration("mdm.cliPath")) {
         client.clearCache();
-        skillsProvider.refresh();
-        agentsProvider.refresh();
-        rulesProvider.refresh();
+        void vscode.commands.executeCommand("mdm.refreshAll");
       }
     })
   );
 
+  // Lock file edits (mdm runs in a terminal, git operations, migrations)
+  // should reflect in every view without a manual refresh.
+  const lockWatcher = vscode.workspace.createFileSystemWatcher(
+    "**/{mdm-lock.json,skills-lock.json,knowledge-lock.json,plugins-lock.json}"
+  );
+  const onLockChange = (): void => {
+    void vscode.commands.executeCommand("mdm.refreshAll");
+  };
+  lockWatcher.onDidChange(onLockChange);
+  lockWatcher.onDidCreate(onLockChange);
+  lockWatcher.onDidDelete(onLockChange);
+  context.subscriptions.push(lockWatcher);
+
   checkCliAndWarn(client);
+  void checkCliVersionAlignment(client);
+  void offerMigration(client, outputChannel, { manual: false });
+}
+
+/**
+ * The extension and the CLI are major-version aligned: extension 2.x
+ * drives mdm 2.x. A CLI behind the extension gets an upgrade nudge; a CLI
+ * ahead of it means the extension needs updating. Dev builds report no
+ * version and are left alone.
+ */
+async function checkCliVersionAlignment(client: MdmClient): Promise<void> {
+  if (!(await client.checkInstalled())) {
+    return;
+  }
+  const major = await client.cliMajorVersion();
+  if (major === undefined || major === SUPPORTED_CLI_MAJOR) {
+    return;
+  }
+  if (major < SUPPORTED_CLI_MAJOR) {
+    const action = await vscode.window.showWarningMessage(
+      `mdm CLI v${major} detected — this extension targets v${SUPPORTED_CLI_MAJOR}. Some features (mdm-lock.json, knowledge, plugins) need the newer CLI.`,
+      "Run mdm upgrade",
+      "Dismiss"
+    );
+    if (action === "Run mdm upgrade") {
+      const terminal = vscode.window.createTerminal("mdm upgrade");
+      terminal.show();
+      terminal.sendText("mdm upgrade");
+    }
+    return;
+  }
+  void vscode.window.showWarningMessage(
+    `mdm CLI v${major} detected — this extension targets v${SUPPORTED_CLI_MAJOR}. Update the MDM extension to match.`
+  );
+}
+
+/**
+ * Surfaces `mdm migrate` in VS Code. On activation this only speaks up
+ * when v1 lock files are actually present; the command-palette entry
+ * (manual: true) always reports something.
+ */
+async function offerMigration(
+  client: MdmClient,
+  outputChannel: vscode.OutputChannel,
+  opts: { manual: boolean }
+): Promise<void> {
+  if (!(await client.checkInstalled())) {
+    return;
+  }
+  const major = await client.cliMajorVersion();
+  if (major !== undefined && major < SUPPORTED_CLI_MAJOR) {
+    // A v1 CLI has no migrate command; the version handshake already nudged.
+    return;
+  }
+  const legacy = await client.detectLegacyLockFiles();
+  if (legacy.length === 0) {
+    if (opts.manual) {
+      void vscode.window.showInformationMessage(
+        "Nothing to migrate — no v1 lock files found."
+      );
+    }
+    return;
+  }
+  const choice = await vscode.window.showInformationMessage(
+    `This project has v1 lock files (${legacy.join(", ")}). Fold them into mdm-lock.json?`,
+    "Migrate",
+    "Migrate & delete old files",
+    "Show plan"
+  );
+  if (!choice) {
+    return;
+  }
+  try {
+    if (choice === "Show plan") {
+      const plan = await client.migrateDryRun();
+      outputChannel.clear();
+      outputChannel.appendLine(plan);
+      outputChannel.show(true);
+      return;
+    }
+    const output = await vscode.window.withProgress(
+      {
+        location: vscode.ProgressLocation.Notification,
+        title: "Migrating lock files…"
+      },
+      () => client.migrate(choice === "Migrate & delete old files")
+    );
+    outputChannel.clear();
+    outputChannel.appendLine(output);
+    void vscode.window.showInformationMessage(
+      "Migrated to mdm-lock.json — commit it together with the removed files."
+    );
+    void vscode.commands.executeCommand("mdm.refreshAll");
+  } catch (err) {
+    void vscode.window.showErrorMessage(
+      `mdm migrate failed: ${formatError(err)}`
+    );
+  }
+}
+
+async function runLockSectionAction(
+  item: MdmLockSectionItem,
+  title: string,
+  action: (name: string) => Promise<void>
+): Promise<void> {
+  const name = item.entry?.name;
+  if (!name) {
+    return;
+  }
+  try {
+    await vscode.window.withProgress(
+      { location: vscode.ProgressLocation.Notification, title },
+      () => action(name)
+    );
+  } catch (err) {
+    void vscode.window.showErrorMessage(formatError(err));
+  }
 }
 
 function checkCliAndWarn(client: MdmClient): void {

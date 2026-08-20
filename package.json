@@ -1,8 +1,8 @@
 {
   "name": "mdm-sidebar",
   "displayName": "MDM",
-  "description": "VS Code extension for the MDM CLI tool. Browse agentic tool configurations from the sidebar.",
-  "version": "1.2.0",
+  "description": "VS Code extension for the MDM CLI (v2). Manage skills, knowledge bundles, plugins, rules, and agents from the sidebar.",
+  "version": "2.0.0",
   "publisher": "SethsSoftware",
   "license": "Apache-2.0",
   "repository": {
@@ -66,6 +66,16 @@
           "id": "mdmAgents",
           "name": "Agents",
           "contextualTitle": "MDM Agents"
+        },
+        {
+          "id": "mdmKnowledge",
+          "name": "Knowledge",
+          "contextualTitle": "MDM Knowledge Bundles"
+        },
+        {
+          "id": "mdmPlugins",
+          "name": "Plugins",
+          "contextualTitle": "MDM Plugins"
         }
       ]
     },
@@ -157,10 +167,70 @@
         "command": "_mdm.rulesUnlink#sideBar",
         "title": "Unlink",
         "icon": "$(debug-disconnect)"
+      },
+      {
+        "command": "_mdm.refreshKnowledge#sideBar",
+        "title": "Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "_mdm.updateKnowledge#sideBar",
+        "title": "Update Knowledge Bundle",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "_mdm.deleteKnowledge#sideBar",
+        "title": "Remove Knowledge Bundle",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "_mdm.refreshPlugins#sideBar",
+        "title": "Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "_mdm.updatePlugin#sideBar",
+        "title": "Update Plugin",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "_mdm.deletePlugin#sideBar",
+        "title": "Remove Plugin",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "mdm.migrate",
+        "category": "MDM",
+        "title": "Migrate v1 Lock Files",
+        "icon": "$(arrow-right)"
       }
     ],
     "menus": {
       "commandPalette": [
+        {
+          "command": "_mdm.refreshKnowledge#sideBar",
+          "when": "false"
+        },
+        {
+          "command": "_mdm.updateKnowledge#sideBar",
+          "when": "false"
+        },
+        {
+          "command": "_mdm.deleteKnowledge#sideBar",
+          "when": "false"
+        },
+        {
+          "command": "_mdm.refreshPlugins#sideBar",
+          "when": "false"
+        },
+        {
+          "command": "_mdm.updatePlugin#sideBar",
+          "when": "false"
+        },
+        {
+          "command": "_mdm.deletePlugin#sideBar",
+          "when": "false"
+        },
         {
           "command": "_mdm.refreshSkills#sideBar",
           "when": "false"
@@ -253,9 +323,39 @@
           "command": "_mdm.refreshRules#sideBar",
           "when": "view == mdmRules",
           "group": "navigation@2"
+        },
+        {
+          "command": "_mdm.refreshKnowledge#sideBar",
+          "when": "view == mdmKnowledge",
+          "group": "navigation@1"
+        },
+        {
+          "command": "_mdm.refreshPlugins#sideBar",
+          "when": "view == mdmPlugins",
+          "group": "navigation@1"
         }
       ],
       "view/item/context": [
+        {
+          "command": "_mdm.updateKnowledge#sideBar",
+          "when": "viewItem == mdm-knowledge",
+          "group": "inline@1"
+        },
+        {
+          "command": "_mdm.deleteKnowledge#sideBar",
+          "when": "viewItem == mdm-knowledge",
+          "group": "inline@2"
+        },
+        {
+          "command": "_mdm.updatePlugin#sideBar",
+          "when": "viewItem == mdm-plugin",
+          "group": "inline@1"
+        },
+        {
+          "command": "_mdm.deletePlugin#sideBar",
+          "when": "viewItem == mdm-plugin",
+          "group": "inline@2"
+        },
         {
           "command": "_mdm.findSkill#sideBar",
           "when": "viewItem == mdm-skills-scope-global || viewItem == mdm-skills-scope-project",

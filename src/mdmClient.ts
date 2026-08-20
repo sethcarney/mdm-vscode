@@ -1,6 +1,6 @@
 import { execFile } from "child_process";
 import { promisify } from "util";
-import { access } from "fs/promises";
+import { access, readFile } from "fs/promises";
 import * as os from "os";
 import * as path from "path";
 import * as vscode from "vscode";
@@ -56,6 +56,23 @@ export interface AuditResult {
   audits?: AuditProvider[];
   skillId?: string;
   registryError?: boolean;
+}
+
+export interface LockSectionEntry {
+  name: string;
+  source: string;
+  ref?: string;
+  installDir?: string;
+  specVersion?: string;
+  /** Plugin manifest version, when present. */
+  version?: string;
+  /** Skill names a plugin installs, when present. */
+  skills?: string[];
+}
+
+export interface ProjectLockSections {
+  knowledge: LockSectionEntry[];
+  plugins: LockSectionEntry[];
 }
 
 export interface MdmItem {
@@ -285,17 +302,150 @@ export class MdmClient {
     });
   }
 
-  async hasSkillsLockFile(): Promise<boolean> {
+  async hasProjectLockFile(): Promise<boolean> {
     const root = this.workspaceRoot;
     if (!root) {
       return false;
     }
-    try {
-      await access(path.join(root, "skills-lock.json"));
-      return true;
-    } catch {
-      return false;
+    for (const name of ["mdm-lock.json", "skills-lock.json"]) {
+      try {
+        await access(path.join(root, name));
+        return true;
+      } catch {
+        // keep looking
+      }
     }
+    return false;
+  }
+
+  /**
+   * v1 lock files still present in the project. mdm v2 reads them
+   * transparently but only ever writes mdm-lock.json, so their presence
+   * means `mdm migrate` has not been run yet. The skills-lock.json
+   * tombstone that migration leaves behind (marked with "_moved") does
+   * not count.
+   */
+  async detectLegacyLockFiles(): Promise<string[]> {
+    const root = this.workspaceRoot;
+    if (!root) {
+      return [];
+    }
+    const found: string[] = [];
+    for (const name of [
+      "skills-lock.json",
+      "knowledge-lock.json",
+      "plugins-lock.json"
+    ]) {
+      try {
+        const raw = await readFile(path.join(root, name), "utf8");
+        const data: unknown = JSON.parse(raw);
+        const moved =
+          typeof data === "object" && data !== null
+            ? (data as Record<string, unknown>)["_moved"]
+            : undefined;
+        if (typeof moved !== "string") {
+          found.push(name);
+        }
+      } catch {
+        // absent or unreadable — migration itself will surface parse errors
+      }
+    }
+    return found;
+  }
+
+  /** Reported CLI semver major, or undefined for dev builds. */
+  async cliMajorVersion(): Promise<number | undefined> {
+    try {
+      const { stdout } = await execFileAsync(this.cliPath, ["--version"], {
+        timeout: 5000,
+        cwd: this.workspaceRoot
+      });
+      const match = /(\d+)\.\d+\.\d+/.exec(stripAnsi(stdout));
+      return match ? Number(match[1]) : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  async migrateDryRun(): Promise<string> {
+    const { stdout } = await execFileAsync(
+      this.cliPath,
+      ["migrate", "--dry-run"],
+      { timeout: 30_000, cwd: this.workspaceRoot }
+    );
+    return stripAnsi(stdout);
+  }
+
+  async migrate(deleteOldFiles: boolean): Promise<string> {
+    const args = ["migrate", "-y"];
+    if (deleteOldFiles) {
+      args.push("--no-tombstone");
+    }
+    const { stdout } = await execFileAsync(this.cliPath, args, {
+      timeout: 60_000,
+      cwd: this.workspaceRoot
+    });
+    return stripAnsi(stdout);
+  }
+
+  /**
+   * Knowledge and plugin entries come straight from the project lock —
+   * mdm-lock.json is the source of truth, with the v1 per-feature files
+   * as a pre-migration fallback. No CLI round trip needed for listing.
+   */
+  async readProjectLockSections(): Promise<ProjectLockSections> {
+    const root = this.workspaceRoot;
+    const empty: ProjectLockSections = { knowledge: [], plugins: [] };
+    if (!root) {
+      return empty;
+    }
+    const unified = await readJsonFile(path.join(root, "mdm-lock.json"));
+    if (unified) {
+      return {
+        knowledge: parseLockSection(unified["knowledge"]),
+        plugins: parseLockSection(unified["plugins"])
+      };
+    }
+    const [legacyKnowledge, legacyPlugins] = await Promise.all([
+      readJsonFile(path.join(root, "knowledge-lock.json")),
+      readJsonFile(path.join(root, "plugins-lock.json"))
+    ]);
+    return {
+      knowledge: parseLockSection(legacyKnowledge?.["bundles"]),
+      plugins: parseLockSection(legacyPlugins?.["plugins"])
+    };
+  }
+
+  async removeKnowledge(name: string): Promise<void> {
+    await execFileAsync(this.cliPath, ["knowledge", "remove", name, "-y"], {
+      timeout: 30_000,
+      cwd: this.workspaceRoot
+    });
+  }
+
+  async updateKnowledge(name: string): Promise<void> {
+    await execFileAsync(this.cliPath, ["knowledge", "update", name], {
+      timeout: 120_000,
+      cwd: this.workspaceRoot
+    });
+  }
+
+  async removePlugin(name: string, purgeData: boolean): Promise<void> {
+    const args = ["plugins", "remove", name, "-y"];
+    if (purgeData) {
+      args.push("--purge-data");
+    }
+    await execFileAsync(this.cliPath, args, {
+      timeout: 30_000,
+      cwd: this.workspaceRoot
+    });
+  }
+
+  async updatePlugin(name: string): Promise<void> {
+    await execFileAsync(this.cliPath, ["plugins", "update", name], {
+      timeout: 120_000,
+      cwd: this.workspaceRoot
+    });
   }
 
   async runDoctor(): Promise<string> {
@@ -349,13 +499,15 @@ export class MdmClient {
 
   private async listAgents(): Promise<MdmItem[]> {
     const opts = { timeout: 10_000, cwd: this.workspaceRoot };
-    const globalSkillsLock = path.join(
-      os.homedir(),
-      ".agents",
-      "skills-lock.json"
+    const globalStateFile = await firstExisting(
+      path.join(os.homedir(), ".agents", "mdm-state.json"),
+      path.join(os.homedir(), ".agents", "skills-lock.json")
     );
-    const projectSkillsLock = this.workspaceRoot
-      ? path.join(this.workspaceRoot, "skills-lock.json")
+    const projectLockFile = this.workspaceRoot
+      ? await firstExisting(
+          path.join(this.workspaceRoot, "mdm-lock.json"),
+          path.join(this.workspaceRoot, "skills-lock.json")
+        )
       : undefined;
 
     const fetchScope = async (global: boolean): Promise<AgentJson[]> => {
@@ -389,7 +541,7 @@ export class MdmClient {
       name: agent.displayName,
       cliName: agent.name,
       scope: agent.scope,
-      filePath: agent.scope === "global" ? globalSkillsLock : projectSkillsLock,
+      filePath: agent.scope === "global" ? globalStateFile : projectLockFile,
       status: missingRules.has(agent.name) ? "⚠ rules not linked" : undefined
     }));
   }
@@ -398,6 +550,65 @@ export class MdmClient {
 // ---------------------------------------------------------------------------
 // Parsers
 // ---------------------------------------------------------------------------
+
+async function firstExisting(
+  ...candidates: string[]
+): Promise<string | undefined> {
+  for (const candidate of candidates) {
+    try {
+      await access(candidate);
+      return candidate;
+    } catch {
+      // keep looking
+    }
+  }
+  return candidates[0];
+}
+
+async function readJsonFile(
+  filePath: string
+): Promise<Record<string, unknown> | undefined> {
+  try {
+    const raw = await readFile(filePath, "utf8");
+    const data: unknown = JSON.parse(raw);
+    if (typeof data === "object" && data !== null && !Array.isArray(data)) {
+      return data as Record<string, unknown>;
+    }
+  } catch {
+    // absent or unreadable — callers treat this as an empty section
+  }
+  return undefined;
+}
+
+function parseLockSection(section: unknown): LockSectionEntry[] {
+  if (typeof section !== "object" || section === null) {
+    return [];
+  }
+  return Object.entries(section as Record<string, unknown>)
+    .map(([name, value]): LockSectionEntry | undefined => {
+      if (typeof value !== "object" || value === null) {
+        return undefined;
+      }
+      const o = value as Record<string, unknown>;
+      const str = (key: string): string | undefined =>
+        typeof o[key] === "string" ? (o[key] as string) : undefined;
+      return {
+        name,
+        source: str("source") ?? "",
+        ref: str("ref"),
+        installDir: str("installDir"),
+        specVersion: str("specVersion"),
+        version: str("version"),
+        skills: Array.isArray(o["skills"])
+          ? (o["skills"] as unknown[]).filter(
+              (v): v is string => typeof v === "string"
+            )
+          : undefined
+      };
+    })
+    .filter((v): v is LockSectionEntry => v !== undefined)
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
 
 export function stripAnsi(text: string): string {
   return text.replace(/\x1B\[[0-9;]*m/g, "");

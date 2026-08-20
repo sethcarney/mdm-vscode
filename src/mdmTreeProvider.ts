@@ -1,6 +1,7 @@
 import * as path from "path";
 import * as vscode from "vscode";
 import {
+  LockSectionEntry,
   MdmClient,
   MdmItem,
   MdmResourceType,
@@ -176,7 +177,7 @@ export class MdmTreeProvider implements vscode.TreeDataProvider<MdmTreeItem> {
         this.resource === "skills" &&
         element.itemScope === "project" &&
         scopeItems.length === 0 &&
-        (await this.client.hasSkillsLockFile())
+        (await this.client.hasProjectLockFile())
       ) {
         scopeItems.push(installPromptItem());
       }
@@ -391,4 +392,133 @@ function errorItem(message: string): MdmTreeItem {
     kind: "message",
     isError: true
   });
+}
+
+// ---------------------------------------------------------------------------
+// Knowledge / Plugins trees — flat lists over the project lock sections
+// ---------------------------------------------------------------------------
+
+export type LockSection = "knowledge" | "plugins";
+
+export class MdmLockSectionItem extends vscode.TreeItem {
+  readonly kind: "lock-entry" | "message";
+  readonly entry?: LockSectionEntry;
+  readonly section?: LockSection;
+
+  constructor(
+    label: string,
+    options:
+      | { kind: "lock-entry"; entry: LockSectionEntry; section: LockSection }
+      | { kind: "message"; isError?: boolean }
+  ) {
+    super(label, vscode.TreeItemCollapsibleState.None);
+    this.kind = options.kind;
+
+    if (options.kind === "message") {
+      this.iconPath = options.isError
+        ? new vscode.ThemeIcon(
+            "warning",
+            new vscode.ThemeColor("problemsWarningIcon.foreground")
+          )
+        : new vscode.ThemeIcon("info");
+      return;
+    }
+
+    const { entry, section } = options;
+    this.entry = entry;
+    this.section = section;
+    this.iconPath = new vscode.ThemeIcon(
+      section === "knowledge" ? "book" : "plug"
+    );
+    this.contextValue =
+      section === "knowledge" ? "mdm-knowledge" : "mdm-plugin";
+    this.description = entry.version ?? entry.ref ?? entry.specVersion;
+    const lines = [entry.name, entry.source];
+    if (entry.skills?.length) {
+      lines.push(`skills: ${entry.skills.join(", ")}`);
+    }
+    this.tooltip = lines.filter(Boolean).join("\n");
+
+    const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    if (root && entry.installDir) {
+      const anchor = section === "knowledge" ? "index.md" : "plugin.json";
+      this.command = {
+        command: "vscode.open",
+        title: "Open",
+        arguments: [vscode.Uri.file(path.join(root, entry.installDir, anchor))]
+      };
+    }
+  }
+}
+
+export class MdmLockSectionTreeProvider implements vscode.TreeDataProvider<MdmLockSectionItem> {
+  private readonly _onDidChangeTreeData = new vscode.EventEmitter<
+    MdmLockSectionItem | undefined | null | void
+  >();
+  readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
+
+  private _refreshTimer: ReturnType<typeof setTimeout> | undefined;
+
+  constructor(
+    private readonly client: MdmClient,
+    private readonly section: LockSection
+  ) {}
+
+  refresh(): void {
+    if (this._refreshTimer !== undefined) {
+      clearTimeout(this._refreshTimer);
+    }
+    this._refreshTimer = setTimeout(() => {
+      this._refreshTimer = undefined;
+      this._onDidChangeTreeData.fire();
+    }, 100);
+  }
+
+  dispose(): void {
+    if (this._refreshTimer !== undefined) {
+      clearTimeout(this._refreshTimer);
+    }
+    this._onDidChangeTreeData.dispose();
+  }
+
+  getTreeItem(element: MdmLockSectionItem): vscode.TreeItem {
+    return element;
+  }
+
+  async getChildren(
+    element?: MdmLockSectionItem
+  ): Promise<MdmLockSectionItem[]> {
+    if (element) {
+      return [];
+    }
+    try {
+      const sections = await this.client.readProjectLockSections();
+      const entries = sections[this.section];
+      if (entries.length === 0) {
+        return [
+          new MdmLockSectionItem(
+            this.section === "knowledge"
+              ? "No knowledge bundles installed"
+              : "No plugins installed",
+            { kind: "message" }
+          )
+        ];
+      }
+      return entries.map(
+        (entry) =>
+          new MdmLockSectionItem(entry.name, {
+            kind: "lock-entry",
+            entry,
+            section: this.section
+          })
+      );
+    } catch (err) {
+      return [
+        new MdmLockSectionItem(
+          err instanceof Error ? err.message : String(err),
+          { kind: "message", isError: true }
+        )
+      ];
+    }
+  }
 }

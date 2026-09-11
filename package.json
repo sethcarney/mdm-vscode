@@ -1,8 +1,8 @@
 {
   "name": "mdm-sidebar",
   "displayName": "MDM",
-  "description": "VS Code extension for the MDM CLI tool. Browse agentic tool configurations from the sidebar.",
-  "version": "1.2.0",
+  "description": "VS Code extension for the MDM CLI (v2). Manage skills, agent definitions, harnesses, rules, knowledge bundles, and plugins from the sidebar, with mdm.lock JSON validation.",
+  "version": "2.0.0",
   "publisher": "SethsSoftware",
   "license": "Apache-2.0",
   "repository": {
@@ -14,7 +14,7 @@
   },
   "homepage": "https://github.com/sethcarney/mdm-vscode#readme",
   "engines": {
-    "vscode": "^1.85.0"
+    "vscode": "^1.125.0"
   },
   "icon": "resources/mdm.png",
   "categories": [
@@ -26,6 +26,7 @@
     "cli",
     "skills",
     "agents",
+    "harnesses",
     "management"
   ],
   "activationEvents": [],
@@ -58,17 +59,117 @@
           "contextualTitle": "MDM Skills"
         },
         {
+          "id": "mdmAgents",
+          "name": "Agents",
+          "contextualTitle": "MDM Agent Definitions"
+        },
+        {
+          "id": "mdmHarnesses",
+          "name": "Harnesses",
+          "contextualTitle": "MDM Harnesses"
+        },
+        {
           "id": "mdmRules",
           "name": "Rules",
           "contextualTitle": "MDM Rules"
         },
         {
-          "id": "mdmAgents",
-          "name": "Agents",
-          "contextualTitle": "MDM Agents"
+          "id": "mdmKnowledge",
+          "name": "Knowledge",
+          "contextualTitle": "MDM Knowledge Bundles"
+        },
+        {
+          "id": "mdmPlugins",
+          "name": "Plugins",
+          "contextualTitle": "MDM Plugins"
         }
       ]
     },
+    "viewsWelcome": [
+      {
+        "view": "mdmSkills",
+        "when": "mdm.cliMissing",
+        "contents": "The mdm CLI was not found on this machine.\n[Configure CLI Path](command:workbench.action.openSettings?%22mdm.cliPath%22)\nOr install it (see the [installation guide](https://github.com/sethcarney/mdm#installation)), then reload the window."
+      },
+      {
+        "view": "mdmSkills",
+        "when": "!mdm.cliMissing && mdm.projectLockPresent",
+        "contents": "No skills installed yet, but this project has a lock file.\n[Restore Project from Lock](command:mdm.restoreProject)\n[Find Skills](command:mdm.findSkill)"
+      },
+      {
+        "view": "mdmSkills",
+        "when": "!mdm.cliMissing && !mdm.projectLockPresent",
+        "contents": "No skills installed yet.\n[Find Skills](command:mdm.findSkill)\nSkills are reusable markdown instructions installed for your AI harnesses."
+      },
+      {
+        "view": "mdmAgents",
+        "when": "mdm.cliMissing",
+        "contents": "mdm CLI not found. See the Skills view."
+      },
+      {
+        "view": "mdmAgents",
+        "when": "!mdm.cliMissing",
+        "contents": "No agent definitions installed.\n[Add Agent Definitions](command:mdm.addAgent)\nAgent definitions are single markdown (or Codex TOML) files that give a harness a named subagent persona, installed into each harness's own agents directory."
+      },
+      {
+        "view": "mdmHarnesses",
+        "when": "mdm.cliMissing",
+        "contents": "mdm CLI not found. See the Skills view."
+      },
+      {
+        "view": "mdmHarnesses",
+        "when": "!mdm.cliMissing",
+        "contents": "No harnesses configured.\n[Add Harness](command:mdm.addHarness)\nHarnesses are the AI tools themselves (Claude Code, Cursor, Copilot, …). Configured harnesses are the default install targets for skills and agent definitions."
+      },
+      {
+        "view": "mdmRules",
+        "when": "mdm.cliMissing",
+        "contents": "mdm CLI not found. See the Skills view."
+      },
+      {
+        "view": "mdmRules",
+        "when": "!mdm.cliMissing",
+        "contents": "No rules linked yet.\n[Link Harness Rules](command:mdm.linkRules)\nLinking points every harness's instruction file (CLAUDE.md, .cursorrules, …) at a single AGENTS.md."
+      },
+      {
+        "view": "mdmKnowledge",
+        "when": "mdm.cliMissing",
+        "contents": "mdm CLI not found. See the Skills view."
+      },
+      {
+        "view": "mdmKnowledge",
+        "when": "!mdm.cliMissing",
+        "contents": "No knowledge bundles installed.\n[Add Knowledge Bundle](command:mdm.addKnowledge)\nKnowledge bundles are OKF markdown reference sets for AI agents."
+      },
+      {
+        "view": "mdmPlugins",
+        "when": "mdm.cliMissing",
+        "contents": "mdm CLI not found. See the Skills view."
+      },
+      {
+        "view": "mdmPlugins",
+        "when": "!mdm.cliMissing",
+        "contents": "No plugins installed.\n[Add Plugin](command:mdm.addPlugin)\nAgent Plugins bundle skills and MCP servers in one installable package."
+      }
+    ],
+    "languages": [
+      {
+        "id": "json",
+        "filenames": [
+          "mdm.lock"
+        ]
+      }
+    ],
+    "jsonValidation": [
+      {
+        "fileMatch": "mdm.lock",
+        "url": "./schemas/mdm-lock.schema.json"
+      },
+      {
+        "fileMatch": "mdm-state.json",
+        "url": "./schemas/mdm-state.schema.json"
+      }
+    ],
     "commands": [
       {
         "command": "_mdm.refreshSkills#sideBar",
@@ -77,6 +178,26 @@
       },
       {
         "command": "_mdm.refreshAgents#sideBar",
+        "title": "Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "_mdm.refreshHarnesses#sideBar",
+        "title": "Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "_mdm.refreshRules#sideBar",
+        "title": "Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "_mdm.refreshKnowledge#sideBar",
+        "title": "Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "_mdm.refreshPlugins#sideBar",
         "title": "Refresh",
         "icon": "$(refresh)"
       },
@@ -93,14 +214,20 @@
       },
       {
         "command": "mdm.doctor",
-        "category": "MDM",
         "title": "Doctor",
+        "category": "MDM",
         "icon": "$(pulse)"
       },
       {
-        "command": "mdm.installSkills",
+        "command": "mdm.reportBug",
+        "title": "Report a Bug",
         "category": "MDM",
+        "icon": "$(bug)"
+      },
+      {
+        "command": "mdm.installSkills",
         "title": "Install Configured Project Skills",
+        "category": "MDM",
         "icon": "$(cloud-download)"
       },
       {
@@ -129,23 +256,79 @@
         "icon": "$(trash)"
       },
       {
+        "command": "_mdm.setInstallMode#sideBar",
+        "title": "Set Install Mode (symlink / copy)",
+        "icon": "$(settings)"
+      },
+      {
+        "command": "mdm.setInstallMode",
+        "title": "Set Project Install Mode (symlink / copy)",
+        "category": "MDM",
+        "icon": "$(settings)"
+      },
+      {
+        "command": "mdm.cherryPickSkill",
+        "title": "Cherry-pick (Fork) Skill into ./skills",
+        "category": "MDM",
+        "icon": "$(repo-forked)"
+      },
+      {
         "command": "_mdm.addAgent#sideBar",
-        "title": "Add Agent",
+        "title": "Add Agent Definitions",
         "icon": "$(add)"
       },
       {
+        "command": "_mdm.updateAgent#sideBar",
+        "title": "Update Agent Definition",
+        "icon": "$(cloud-download)"
+      },
+      {
         "command": "_mdm.deleteAgent#sideBar",
-        "title": "Remove Agent",
+        "title": "Remove Agent Definition",
         "icon": "$(trash)"
       },
       {
-        "command": "_mdm.refreshRules#sideBar",
-        "title": "Refresh",
-        "icon": "$(refresh)"
+        "command": "_mdm.updateAllAgents#sideBar",
+        "title": "Update All Agent Definitions",
+        "icon": "$(sync)"
       },
       {
-        "command": "_mdm.rulesLinkAgent#sideBar",
-        "title": "Link Agent Rules",
+        "command": "mdm.addAgent",
+        "title": "Add Agent Definitions",
+        "category": "MDM",
+        "icon": "$(add)"
+      },
+      {
+        "command": "mdm.updateAllAgents",
+        "title": "Update All Agent Definitions",
+        "category": "MDM",
+        "icon": "$(sync)"
+      },
+      {
+        "command": "mdm.installAgents",
+        "title": "Restore Agent Definitions from Lock",
+        "category": "MDM",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "_mdm.addHarness#sideBar",
+        "title": "Add Harness",
+        "icon": "$(add)"
+      },
+      {
+        "command": "_mdm.deleteHarness#sideBar",
+        "title": "Remove Harness",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "mdm.addHarness",
+        "title": "Add Harness",
+        "category": "MDM",
+        "icon": "$(add)"
+      },
+      {
+        "command": "_mdm.rulesLinkHarness#sideBar",
+        "title": "Link Harness Rules",
         "icon": "$(link)"
       },
       {
@@ -157,6 +340,97 @@
         "command": "_mdm.rulesUnlink#sideBar",
         "title": "Unlink",
         "icon": "$(debug-disconnect)"
+      },
+      {
+        "command": "mdm.linkRules",
+        "title": "Link Harness Rules",
+        "category": "MDM",
+        "icon": "$(link)"
+      },
+      {
+        "command": "_mdm.updateKnowledge#sideBar",
+        "title": "Update Knowledge Bundle",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "_mdm.deleteKnowledge#sideBar",
+        "title": "Remove Knowledge Bundle",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "_mdm.updatePlugin#sideBar",
+        "title": "Update Plugin",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "_mdm.deletePlugin#sideBar",
+        "title": "Remove Plugin",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "mdm.migrate",
+        "title": "Migrate v1 Lock Files",
+        "category": "MDM",
+        "icon": "$(arrow-right)"
+      },
+      {
+        "command": "mdm.findSkill",
+        "title": "Find & Install Skill",
+        "category": "MDM",
+        "icon": "$(search)"
+      },
+      {
+        "command": "mdm.updateAllSkills",
+        "title": "Update All Skills",
+        "category": "MDM",
+        "icon": "$(sync)"
+      },
+      {
+        "command": "mdm.auditSkills",
+        "title": "Audit Skills",
+        "category": "MDM",
+        "icon": "$(shield)"
+      },
+      {
+        "command": "mdm.addKnowledge",
+        "title": "Add Knowledge Bundle",
+        "category": "MDM",
+        "icon": "$(add)"
+      },
+      {
+        "command": "mdm.addPlugin",
+        "title": "Add Plugin",
+        "category": "MDM",
+        "icon": "$(add)"
+      },
+      {
+        "command": "mdm.installKnowledge",
+        "title": "Install Configured Knowledge Bundles",
+        "category": "MDM",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "mdm.installPlugins",
+        "title": "Install Configured Plugins",
+        "category": "MDM",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "mdm.restoreProject",
+        "title": "Restore Project from Lock (skills + agents + knowledge + plugins)",
+        "category": "MDM",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "mdm.openLockFile",
+        "title": "Open mdm.lock",
+        "category": "MDM",
+        "icon": "$(go-to-file)"
+      },
+      {
+        "command": "mdm.menu",
+        "title": "Quick Actions",
+        "category": "MDM"
       }
     ],
     "menus": {
@@ -167,6 +441,22 @@
         },
         {
           "command": "_mdm.refreshAgents#sideBar",
+          "when": "false"
+        },
+        {
+          "command": "_mdm.refreshHarnesses#sideBar",
+          "when": "false"
+        },
+        {
+          "command": "_mdm.refreshRules#sideBar",
+          "when": "false"
+        },
+        {
+          "command": "_mdm.refreshKnowledge#sideBar",
+          "when": "false"
+        },
+        {
+          "command": "_mdm.refreshPlugins#sideBar",
           "when": "false"
         },
         {
@@ -194,7 +484,15 @@
           "when": "false"
         },
         {
+          "command": "_mdm.setInstallMode#sideBar",
+          "when": "false"
+        },
+        {
           "command": "_mdm.addAgent#sideBar",
+          "when": "false"
+        },
+        {
+          "command": "_mdm.updateAgent#sideBar",
           "when": "false"
         },
         {
@@ -202,11 +500,19 @@
           "when": "false"
         },
         {
-          "command": "_mdm.refreshRules#sideBar",
+          "command": "_mdm.updateAllAgents#sideBar",
           "when": "false"
         },
         {
-          "command": "_mdm.rulesLinkAgent#sideBar",
+          "command": "_mdm.addHarness#sideBar",
+          "when": "false"
+        },
+        {
+          "command": "_mdm.deleteHarness#sideBar",
+          "when": "false"
+        },
+        {
+          "command": "_mdm.rulesLinkHarness#sideBar",
           "when": "false"
         },
         {
@@ -215,6 +521,22 @@
         },
         {
           "command": "_mdm.rulesUnlink#sideBar",
+          "when": "false"
+        },
+        {
+          "command": "_mdm.updateKnowledge#sideBar",
+          "when": "false"
+        },
+        {
+          "command": "_mdm.deleteKnowledge#sideBar",
+          "when": "false"
+        },
+        {
+          "command": "_mdm.updatePlugin#sideBar",
+          "when": "false"
+        },
+        {
+          "command": "_mdm.deletePlugin#sideBar",
           "when": "false"
         }
       ],
@@ -235,17 +557,72 @@
           "group": "navigation@3"
         },
         {
+          "command": "mdm.installSkills",
+          "when": "view == mdmSkills",
+          "group": "1_actions@1"
+        },
+        {
+          "command": "mdm.auditSkills",
+          "when": "view == mdmSkills",
+          "group": "1_actions@2"
+        },
+        {
+          "command": "mdm.cherryPickSkill",
+          "when": "view == mdmSkills",
+          "group": "1_actions@3"
+        },
+        {
+          "command": "mdm.setInstallMode",
+          "when": "view == mdmSkills",
+          "group": "1_actions@4"
+        },
+        {
+          "command": "mdm.restoreProject",
+          "when": "view == mdmSkills",
+          "group": "2_project@1"
+        },
+        {
+          "command": "mdm.migrate",
+          "when": "view == mdmSkills",
+          "group": "2_project@2"
+        },
+        {
+          "command": "mdm.openLockFile",
+          "when": "view == mdmSkills",
+          "group": "2_project@3"
+        },
+        {
           "command": "_mdm.addAgent#sideBar",
           "when": "view == mdmAgents",
           "group": "navigation@1"
         },
         {
-          "command": "_mdm.refreshAgents#sideBar",
+          "command": "_mdm.updateAllAgents#sideBar",
           "when": "view == mdmAgents",
           "group": "navigation@2"
         },
         {
-          "command": "_mdm.rulesLinkAgent#sideBar",
+          "command": "_mdm.refreshAgents#sideBar",
+          "when": "view == mdmAgents",
+          "group": "navigation@3"
+        },
+        {
+          "command": "mdm.installAgents",
+          "when": "view == mdmAgents",
+          "group": "1_actions@1"
+        },
+        {
+          "command": "_mdm.addHarness#sideBar",
+          "when": "view == mdmHarnesses",
+          "group": "navigation@1"
+        },
+        {
+          "command": "_mdm.refreshHarnesses#sideBar",
+          "when": "view == mdmHarnesses",
+          "group": "navigation@2"
+        },
+        {
+          "command": "_mdm.rulesLinkHarness#sideBar",
           "when": "view == mdmRules",
           "group": "navigation@1"
         },
@@ -253,6 +630,36 @@
           "command": "_mdm.refreshRules#sideBar",
           "when": "view == mdmRules",
           "group": "navigation@2"
+        },
+        {
+          "command": "mdm.addKnowledge",
+          "when": "view == mdmKnowledge",
+          "group": "navigation@1"
+        },
+        {
+          "command": "_mdm.refreshKnowledge#sideBar",
+          "when": "view == mdmKnowledge",
+          "group": "navigation@2"
+        },
+        {
+          "command": "mdm.installKnowledge",
+          "when": "view == mdmKnowledge",
+          "group": "1_actions@1"
+        },
+        {
+          "command": "mdm.addPlugin",
+          "when": "view == mdmPlugins",
+          "group": "navigation@1"
+        },
+        {
+          "command": "_mdm.refreshPlugins#sideBar",
+          "when": "view == mdmPlugins",
+          "group": "navigation@2"
+        },
+        {
+          "command": "mdm.installPlugins",
+          "when": "view == mdmPlugins",
+          "group": "1_actions@1"
         }
       ],
       "view/item/context": [
@@ -262,9 +669,9 @@
           "group": "inline@1"
         },
         {
-          "command": "_mdm.addAgent#sideBar",
-          "when": "viewItem == mdm-agents-scope-global || viewItem == mdm-agents-scope-project",
-          "group": "inline@1"
+          "command": "_mdm.setInstallMode#sideBar",
+          "when": "viewItem == mdm-skills-scope-project",
+          "group": "context@1"
         },
         {
           "command": "_mdm.updateSkill#sideBar",
@@ -277,29 +684,69 @@
           "group": "inline@2"
         },
         {
-          "command": "_mdm.deleteAgent#sideBar",
-          "when": "viewItem == mdm-agent",
-          "group": "inline@1"
-        },
-        {
           "command": "_mdm.auditSkills#sideBar",
           "when": "viewItem == mdm-skill",
           "group": "context@1"
         },
         {
           "command": "_mdm.copyName#sideBar",
-          "when": "viewItem == mdm-skill || viewItem == mdm-agent",
+          "when": "viewItem == mdm-skill || viewItem == mdm-agent || viewItem == mdm-harness",
           "group": "context@2"
         },
         {
+          "command": "_mdm.addAgent#sideBar",
+          "when": "viewItem == mdm-agents-scope-global || viewItem == mdm-agents-scope-project",
+          "group": "inline@1"
+        },
+        {
+          "command": "_mdm.updateAgent#sideBar",
+          "when": "viewItem == mdm-agent",
+          "group": "inline@1"
+        },
+        {
+          "command": "_mdm.deleteAgent#sideBar",
+          "when": "viewItem == mdm-agent",
+          "group": "inline@2"
+        },
+        {
+          "command": "_mdm.addHarness#sideBar",
+          "when": "viewItem == mdm-harnesses-scope-global || viewItem == mdm-harnesses-scope-project",
+          "group": "inline@1"
+        },
+        {
+          "command": "_mdm.deleteHarness#sideBar",
+          "when": "viewItem == mdm-harness",
+          "group": "inline@1"
+        },
+        {
           "command": "_mdm.rulesLink#sideBar",
-          "when": "viewItem == mdm-rule-missing",
+          "when": "viewItem == mdm-rule-missing || viewItem == mdm-rule-broken",
           "group": "inline@1"
         },
         {
           "command": "_mdm.rulesUnlink#sideBar",
           "when": "viewItem == mdm-rule-linked",
           "group": "inline@1"
+        },
+        {
+          "command": "_mdm.updateKnowledge#sideBar",
+          "when": "viewItem == mdm-knowledge",
+          "group": "inline@1"
+        },
+        {
+          "command": "_mdm.deleteKnowledge#sideBar",
+          "when": "viewItem == mdm-knowledge",
+          "group": "inline@2"
+        },
+        {
+          "command": "_mdm.updatePlugin#sideBar",
+          "when": "viewItem == mdm-plugin",
+          "group": "inline@1"
+        },
+        {
+          "command": "_mdm.deletePlugin#sideBar",
+          "when": "viewItem == mdm-plugin",
+          "group": "inline@2"
         }
       ]
     }

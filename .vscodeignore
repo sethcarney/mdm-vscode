@@ -12,6 +12,7 @@ eslint.config.cjs
 tsconfig.json
 bun.lock
 skills-lock.json
+mdm.lock
 AGENTS.md
 CLAUDE.md
 CONTRIBUTING.md

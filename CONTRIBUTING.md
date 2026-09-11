@@ -5,7 +5,7 @@ Thank you for your interest in contributing!
 ## Prerequisites
 
 - [Bun](https://bun.sh/) >=1.0.0
-- [Visual Studio Code](https://code.visualstudio.com/) >=1.85.0
+- [Visual Studio Code](https://code.visualstudio.com/) >=1.125.0
 - Git
 
 ## Setup

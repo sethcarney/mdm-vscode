@@ -6,7 +6,8 @@ import {
   MdmItem,
   MdmResourceType,
   MdmScope,
-  RulesEntry
+  RulesEntry,
+  ScopeInstallModes
 } from "./mdmClient";
 
 type TreeItemKind = "scope-header" | "resource-item" | "message" | "action";
@@ -26,6 +27,9 @@ export class MdmTreeItem extends vscode.TreeItem {
       resource?: MdmResourceType;
       isError?: boolean;
       command?: vscode.Command;
+      /** Secondary text for scope headers (e.g. the install mode). */
+      description?: string;
+      tooltip?: string;
     }
   ) {
     super(label, collapsibleState);
@@ -34,6 +38,12 @@ export class MdmTreeItem extends vscode.TreeItem {
     this.mdmItem = options.item;
 
     const { item, isError = false, resource } = options;
+    if (options.description) {
+      this.description = options.description;
+    }
+    if (options.tooltip) {
+      this.tooltip = options.tooltip;
+    }
 
     if (isError) {
       this.iconPath = new vscode.ThemeIcon(
@@ -48,7 +58,7 @@ export class MdmTreeItem extends vscode.TreeItem {
       this.iconPath = new vscode.ThemeIcon(
         options.scope === "global" ? "globe" : "folder"
       );
-      if (resource === "agents" || resource === "skills") {
+      if (resource) {
         this.contextValue = `mdm-${resource}-scope-${options.scope ?? "project"}`;
       }
       return;
@@ -72,16 +82,65 @@ export class MdmTreeItem extends vscode.TreeItem {
       return;
     }
 
-    this.tooltip = item.description ? `${label}\n${item.description}` : label;
-
     if (resource === "skills") {
       this.iconPath = new vscode.ThemeIcon("symbol-function");
-      this.description = item.ref;
+      this.description = item.plugin
+        ? `${item.ref ?? ""} (plugin ${item.plugin})`.trim()
+        : item.ref;
       this.contextValue = "mdm-skill";
-    } else {
-      this.iconPath = new vscode.ThemeIcon("robot");
-      this.description = item.status;
+      const lines = [label];
+      if (item.description) {
+        lines.push(item.description);
+      }
+      if (item.harnesses?.length) {
+        lines.push(`harnesses: ${item.harnesses.join(", ")}`);
+      }
+      if (item.plugin) {
+        lines.push(`from plugin: ${item.plugin}`);
+      }
+      this.tooltip = lines.join("\n");
+    } else if (resource === "agents") {
+      // An agent definition: a single markdown/TOML persona file.
+      this.iconPath = new vscode.ThemeIcon(
+        item.status ? "warning" : "robot",
+        item.status
+          ? new vscode.ThemeColor("problemsWarningIcon.foreground")
+          : undefined
+      );
+      this.description = item.status ?? item.ref;
       this.contextValue = "mdm-agent";
+      const lines = [label];
+      if (item.source) {
+        lines.push(`source: ${item.source}${item.ref ? `@${item.ref}` : ""}`);
+      }
+      if (item.format) {
+        lines.push(`format: ${item.format}`);
+      }
+      if (item.filePath) {
+        lines.push(item.filePath);
+      }
+      if (item.status) {
+        lines.push("Canonical file missing: run Restore Agent Definitions");
+      }
+      this.tooltip = lines.join("\n");
+    } else {
+      // A harness: the AI tool itself (Claude Code, Cursor, ...).
+      this.iconPath = new vscode.ThemeIcon("terminal");
+      this.description = item.description
+        ? `⚠ ${item.description}`
+        : item.status;
+      this.contextValue = "mdm-harness";
+      const lines = [label];
+      if (item.cliName) {
+        lines.push(item.cliName);
+      }
+      if (item.status) {
+        lines.push(item.status);
+      }
+      if (item.description) {
+        lines.push(`⚠ ${item.description}`);
+      }
+      this.tooltip = lines.join("\n");
     }
 
     if (item.filePath) {
@@ -141,11 +200,11 @@ export class MdmTreeProvider implements vscode.TreeDataProvider<MdmTreeItem> {
 
     const installed = await this.client.checkInstalled();
     if (!installed) {
-      // Empty tree — the view's viewsWelcome content explains and links out.
+      // Empty tree - the view's viewsWelcome content explains and links out.
       return [];
     }
 
-    // Root level — scope headers, unless there is nothing at all to show
+    // Root level - scope headers, unless there is nothing at all to show
     // (an empty tree lets the view's welcome content render instead).
     if (!element) {
       try {
@@ -162,18 +221,32 @@ export class MdmTreeProvider implements vscode.TreeDataProvider<MdmTreeItem> {
       } catch (err) {
         return [errorItem(err instanceof Error ? err.message : String(err))];
       }
-      return [
-        new MdmTreeItem("Global", vscode.TreeItemCollapsibleState.Expanded, {
-          kind: "scope-header",
-          scope: "global",
-          resource: this.resource
-        }),
-        new MdmTreeItem("Project", vscode.TreeItemCollapsibleState.Expanded, {
-          kind: "scope-header",
-          scope: "project",
-          resource: this.resource
-        })
-      ];
+      // The install mode (symlink or copy) is scope-wide and governs both
+      // skills and agent definitions, so those headers carry it.
+      const modes: ScopeInstallModes =
+        this.resource === "harnesses"
+          ? {}
+          : await this.client.readInstallModes().catch(() => ({}));
+      const header = (scope: MdmScope, label: string): MdmTreeItem => {
+        const mode = modes[scope];
+        return new MdmTreeItem(
+          label,
+          vscode.TreeItemCollapsibleState.Expanded,
+          {
+            kind: "scope-header",
+            scope,
+            resource: this.resource,
+            description:
+              this.resource === "harnesses" ? undefined : (mode ?? "symlink"),
+            tooltip:
+              this.resource === "harnesses"
+                ? undefined
+                : `${label} scope installs in ${mode ?? "symlink"} mode` +
+                  (mode ? "" : " (the default; nothing recorded yet)")
+          }
+        );
+      };
+      return [header("global", "Global"), header("project", "Project")];
     }
 
     // Scope header children
@@ -196,6 +269,15 @@ export class MdmTreeProvider implements vscode.TreeDataProvider<MdmTreeItem> {
         (await this.client.hasProjectLockFile())
       ) {
         scopeItems.push(installPromptItem());
+      }
+
+      // The lock records an agent definition whose canonical file is gone
+      // (a fresh clone, or a deleted .agents/agents): offer the restore.
+      if (
+        this.resource === "agents" &&
+        items.some((i) => i.scope === element.itemScope && i.status)
+      ) {
+        scopeItems.push(restoreAgentsPromptItem());
       }
 
       return scopeItems;
@@ -257,6 +339,15 @@ export class MdmRulesItem extends vscode.TreeItem {
       this.description = `linked → ${entry.target ?? "AGENTS.md"}`;
       this.contextValue = "mdm-rule-linked";
       this.tooltip = `${entry.file}\nSymlink → ${entry.target ?? "AGENTS.md"}`;
+    } else if (entry.state === "broken") {
+      // A symlink whose target is gone: re-linking repairs it.
+      this.iconPath = new vscode.ThemeIcon(
+        "warning",
+        new vscode.ThemeColor("problemsWarningIcon.foreground")
+      );
+      this.description = `broken link → ${entry.target ?? "?"}`;
+      this.contextValue = "mdm-rule-broken";
+      this.tooltip = `${entry.file}\nBroken symlink → ${entry.target ?? "?"}\nRe-link to repair`;
     } else if (entry.state === "real") {
       this.iconPath = new vscode.ThemeIcon("file-text");
       this.description = "source file";
@@ -341,7 +432,7 @@ export class MdmRulesTreeProvider implements vscode.TreeDataProvider<MdmRulesIte
 
     const installed = await this.client.checkInstalled();
     if (!installed) {
-      // Empty tree — the view's viewsWelcome content explains and links out.
+      // Empty tree - the view's viewsWelcome content explains and links out.
       return [];
     }
 
@@ -354,10 +445,12 @@ export class MdmRulesTreeProvider implements vscode.TreeDataProvider<MdmRulesIte
       ];
     }
 
-    const visible = entries.filter((e) => e.state === "linked");
+    const visible = entries.filter(
+      (e) => e.state === "linked" || e.state === "broken"
+    );
 
     if (visible.length === 0) {
-      // Empty tree — the view's viewsWelcome content offers the link action.
+      // Empty tree - the view's viewsWelcome content offers the link action.
       return [];
     }
 
@@ -396,6 +489,17 @@ function installPromptItem(): MdmTreeItem {
   );
 }
 
+function restoreAgentsPromptItem(): MdmTreeItem {
+  return new MdmTreeItem(
+    "Restore agent definitions from lock",
+    vscode.TreeItemCollapsibleState.None,
+    {
+      kind: "action",
+      command: { command: "mdm.installAgents", title: "Restore" }
+    }
+  );
+}
+
 function errorItem(message: string): MdmTreeItem {
   return new MdmTreeItem(message, vscode.TreeItemCollapsibleState.None, {
     kind: "message",
@@ -404,7 +508,7 @@ function errorItem(message: string): MdmTreeItem {
 }
 
 // ---------------------------------------------------------------------------
-// Knowledge / Plugins trees — flat lists over the project lock sections
+// Knowledge / Plugins trees - flat lists over the project lock sections
 // ---------------------------------------------------------------------------
 
 export type LockSection = "knowledge" | "plugins";
@@ -507,7 +611,7 @@ export class MdmLockSectionTreeProvider implements vscode.TreeDataProvider<MdmLo
       const sections = await this.client.readProjectLockSections();
       const entries = sections[this.section];
       if (entries.length === 0) {
-        // Empty tree — the view's viewsWelcome content offers the add action.
+        // Empty tree - the view's viewsWelcome content offers the add action.
         return [];
       }
       return entries.map(

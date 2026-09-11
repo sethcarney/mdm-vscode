@@ -1,6 +1,6 @@
 {
-  "version": 1,
-  "configuredAgents": ["claude-code", "github-copilot"],
+  "version": 2,
+  "configuredHarnesses": ["claude-code", "github-copilot"],
   "skills": {
     "vscode-ext-commands": {
       "source": "github/awesome-copilot",

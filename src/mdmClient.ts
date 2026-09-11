@@ -7,17 +7,47 @@ import * as vscode from "vscode";
 
 const execFileAsync = promisify(execFile);
 
-export type MdmResourceType = "skills" | "agents";
+/** The unified v2 project lock at the project root (JSON content). */
+export const PROJECT_LOCK_NAME = "mdm.lock";
+
+/**
+ * The name the v2 lock carried before the rename to mdm.lock. The CLI has no
+ * compatibility read of it, so the extension only detects it to nudge.
+ */
+export const PRE_RELEASE_LOCK_NAME = "mdm-lock.json";
+
+/** v1 per-feature lock files that `mdm migrate` folds into mdm.lock. */
+export const LEGACY_LOCK_NAMES = [
+  "skills-lock.json",
+  "knowledge-lock.json",
+  "plugins-lock.json"
+] as const;
+
+/** Every lock file name whose change on disk should refresh the views. */
+export const ALL_LOCK_NAMES = [
+  PROJECT_LOCK_NAME,
+  PRE_RELEASE_LOCK_NAME,
+  ...LEGACY_LOCK_NAMES
+] as const;
+
+/**
+ * Tree resources: skills, agent definitions (`mdm agents`, single markdown
+ * or TOML persona files), and harnesses (`mdm harnesses`, the AI tools
+ * themselves).
+ */
+export type MdmResourceType = "skills" | "agents" | "harnesses";
 export type MdmScope = "global" | "project";
+export type InstallMode = "symlink" | "copy";
 
 export interface RulesEntry {
   file: string;
-  state: "linked" | "missing" | "real" | string;
+  state: "linked" | "missing" | "real" | "broken" | "standalone" | string;
   target?: string;
+  /** Harness names (the JSON key is still `agents` for compatibility). */
   agents: string[];
 }
 
-export interface KnownAgent {
+export interface KnownHarness {
   name: string;
   displayName: string;
   installed: boolean;
@@ -75,6 +105,11 @@ export interface ProjectLockSections {
   plugins: LockSectionEntry[];
 }
 
+export interface ScopeInstallModes {
+  project?: InstallMode;
+  global?: InstallMode;
+}
+
 export interface MdmItem {
   name: string;
   description?: string;
@@ -87,9 +122,17 @@ export interface MdmItem {
   ref?: string;
   /** Canonical CLI identifier (e.g. "claude-code"). Falls back to `name`. */
   cliName?: string;
+  /** Harnesses a skill is installed to (from `mdm skills list --json`). */
+  harnesses?: string[];
+  /** Owning plugin, when a skill was installed via `mdm plugins`. */
+  plugin?: string;
+  /** Source the entry was installed from (agent definitions). */
+  source?: string;
+  /** Canonical file format for agent definitions: "markdown" or "toml". */
+  format?: string;
 }
 
-interface AgentJson {
+interface HarnessJson {
   name: string;
   displayName: string;
   scope: MdmScope;
@@ -130,11 +173,19 @@ export class MdmClient {
   }
 
   async listItems(resource: MdmResourceType): Promise<MdmItem[]> {
-    if (resource === "skills") {
-      return this.listSkills();
+    switch (resource) {
+      case "skills":
+        return this.listSkills();
+      case "agents":
+        return this.listAgentDefinitions();
+      case "harnesses":
+        return this.listHarnesses();
     }
-    return this.listAgents();
   }
+
+  // ---------------------------------------------------------------------
+  // Skills
+  // ---------------------------------------------------------------------
 
   async removeSkill(name: string, scope: MdmScope): Promise<void> {
     const args = ["skills", "remove", name, "-y"];
@@ -159,37 +210,6 @@ export class MdmClient {
       timeout: 60_000,
       cwd: this.workspaceRoot
     });
-  }
-
-  async removeAgent(name: string, scope: MdmScope): Promise<void> {
-    const args = ["agents", "remove", name, "-y"];
-    if (scope === "global") {
-      args.push("--global");
-    }
-    await execFileAsync(this.cliPath, args, {
-      timeout: 10_000,
-      cwd: this.workspaceRoot
-    });
-  }
-
-  async addAgent(name: string, scope: MdmScope): Promise<void> {
-    const args = ["agents", "add", name];
-    if (scope === "global") {
-      args.push("--global");
-    }
-    await execFileAsync(this.cliPath, args, {
-      timeout: 10_000,
-      cwd: this.workspaceRoot
-    });
-  }
-
-  async listAvailableAgents(): Promise<KnownAgent[]> {
-    const { stdout } = await execFileAsync(
-      this.cliPath,
-      ["agents", "list", "--available", "--json"],
-      { timeout: 10_000, cwd: this.workspaceRoot }
-    );
-    return assertJsonArray(stdout, isKnownAgent, "agents list --available");
   }
 
   async addSkill(
@@ -217,6 +237,33 @@ export class MdmClient {
       timeout: 120_000,
       cwd: this.workspaceRoot
     });
+  }
+
+  /**
+   * Forks skills from a source into ./skills as the project's own copies
+   * (`mdm skills cherry-pick`). Nothing updates a fork afterwards; the
+   * provenance and license are recorded inside it. Returns the CLI output.
+   */
+  async cherryPickSkills(
+    source: string,
+    skillNames: string[],
+    opts: { install?: boolean; force?: boolean } = {}
+  ): Promise<string> {
+    const args = ["skills", "cherry-pick", source, "-y"];
+    for (const name of skillNames) {
+      args.push("-s", name);
+    }
+    if (opts.install) {
+      args.push("--install", "-p");
+    }
+    if (opts.force) {
+      args.push("--force");
+    }
+    const { stdout } = await execFileAsync(this.cliPath, args, {
+      timeout: 120_000,
+      cwd: this.workspaceRoot
+    });
+    return stripAnsi(stdout);
   }
 
   async preInstallAudit(
@@ -302,28 +349,291 @@ export class MdmClient {
     });
   }
 
+  /**
+   * `mdm skills install` restores every skill, then every agent definition,
+   * recorded in the lock. With a mode flag it also switches the scope's
+   * install mode, re-materializing existing installs first.
+   */
+  async installSkills(mode?: InstallMode): Promise<void> {
+    const args = ["skills", "install", "-y"];
+    if (mode) {
+      args.push(`--${mode}`);
+    }
+    await execFileAsync(this.cliPath, args, {
+      timeout: 120_000,
+      cwd: this.workspaceRoot
+    });
+  }
+
+  // ---------------------------------------------------------------------
+  // Agent definitions (mdm agents)
+  // ---------------------------------------------------------------------
+
+  async addAgentDefinitions(
+    source: string,
+    scope: MdmScope,
+    opts: { harnesses?: string[]; names?: string[] } = {}
+  ): Promise<void> {
+    const args = ["agents", "add", source, "-y"];
+    args.push(scope === "global" ? "-g" : "-p");
+    for (const harness of opts.harnesses ?? []) {
+      args.push("--harness", harness);
+    }
+    for (const name of opts.names ?? []) {
+      args.push("--agent", name);
+    }
+    await execFileAsync(this.cliPath, args, {
+      timeout: 120_000,
+      cwd: this.workspaceRoot
+    });
+  }
+
+  async updateAgentDefinition(name: string, scope: MdmScope): Promise<void> {
+    await execFileAsync(
+      this.cliPath,
+      ["agents", "update", name, "-y", scope === "global" ? "-g" : "-p"],
+      { timeout: 120_000, cwd: this.workspaceRoot }
+    );
+  }
+
+  async updateAllAgentDefinitions(scope?: MdmScope): Promise<void> {
+    const args = ["agents", "update", "-y"];
+    if (scope === "global") {
+      args.push("-g");
+    }
+    if (scope === "project") {
+      args.push("-p");
+    }
+    await execFileAsync(this.cliPath, args, {
+      timeout: 120_000,
+      cwd: this.workspaceRoot
+    });
+  }
+
+  async removeAgentDefinition(name: string, scope: MdmScope): Promise<void> {
+    await execFileAsync(
+      this.cliPath,
+      ["agents", "remove", name, "-y", scope === "global" ? "-g" : "-p"],
+      { timeout: 30_000, cwd: this.workspaceRoot }
+    );
+  }
+
+  /** Restores every agent definition recorded in the project and global locks. */
+  async installAgentDefinitions(): Promise<void> {
+    await execFileAsync(this.cliPath, ["agents", "install", "-y"], {
+      timeout: 120_000,
+      cwd: this.workspaceRoot
+    });
+  }
+
+  /**
+   * `mdm agents list` has no --json, so agent definitions come straight
+   * from the lock files: the `agents` section of mdm.lock (project) and of
+   * mdm-state.json (global). The canonical file lives at
+   * `.agents/agents/<name>.md` (or `.toml` for a Codex source).
+   */
+  private async listAgentDefinitions(): Promise<MdmItem[]> {
+    const root = this.workspaceRoot;
+    const [projectLock, globalState] = await Promise.all([
+      root ? readJsonFile(path.join(root, PROJECT_LOCK_NAME)) : undefined,
+      readJsonFile(globalStatePath())
+    ]);
+    const build = async (
+      section: unknown,
+      scope: MdmScope,
+      baseDir: string | undefined
+    ): Promise<MdmItem[]> => {
+      if (typeof section !== "object" || section === null || !baseDir) {
+        return [];
+      }
+      const items = await Promise.all(
+        Object.entries(section as Record<string, unknown>).map(
+          async ([name, value]): Promise<MdmItem | undefined> => {
+            if (typeof value !== "object" || value === null) {
+              return undefined;
+            }
+            const o = value as Record<string, unknown>;
+            const str = (key: string): string | undefined =>
+              typeof o[key] === "string" ? (o[key] as string) : undefined;
+            const format = str("format") === "toml" ? "toml" : "markdown";
+            const filePath = path.join(
+              baseDir,
+              ".agents",
+              "agents",
+              `${name}${format === "toml" ? ".toml" : ".md"}`
+            );
+            const present = await fileExists(filePath);
+            return {
+              name,
+              scope,
+              filePath,
+              ref: str("ref"),
+              source: str("source"),
+              format,
+              description: str("source"),
+              status: present ? undefined : "⚠ file missing"
+            };
+          }
+        )
+      );
+      return items
+        .filter((v): v is MdmItem => v !== undefined)
+        .sort((a, b) => a.name.localeCompare(b.name));
+    };
+    const [globalItems, projectItems] = await Promise.all([
+      build(globalState?.["agents"], "global", os.homedir()),
+      build(projectLock?.["agents"], "project", root)
+    ]);
+    return [...globalItems, ...projectItems];
+  }
+
+  // ---------------------------------------------------------------------
+  // Harnesses (mdm harnesses) - the AI tools mdm installs into
+  // ---------------------------------------------------------------------
+
+  async removeHarness(name: string, scope: MdmScope): Promise<void> {
+    const args = ["harnesses", "remove", name, "-y"];
+    if (scope === "global") {
+      args.push("--global");
+    }
+    await execFileAsync(this.cliPath, args, {
+      timeout: 10_000,
+      cwd: this.workspaceRoot
+    });
+  }
+
+  async addHarness(name: string, scope: MdmScope): Promise<void> {
+    const args = ["harnesses", "add", name];
+    if (scope === "global") {
+      args.push("--global");
+    }
+    await execFileAsync(this.cliPath, args, {
+      timeout: 10_000,
+      cwd: this.workspaceRoot
+    });
+  }
+
+  async listAvailableHarnesses(): Promise<KnownHarness[]> {
+    const { stdout } = await execFileAsync(
+      this.cliPath,
+      ["harnesses", "list", "--available", "--json"],
+      { timeout: 10_000, cwd: this.workspaceRoot }
+    );
+    return assertJsonArray(
+      stdout,
+      isKnownHarness,
+      "harnesses list --available"
+    );
+  }
+
+  private async listHarnesses(): Promise<MdmItem[]> {
+    const opts = { timeout: 10_000, cwd: this.workspaceRoot };
+    const globalStateFile = await firstExisting(
+      globalStatePath(),
+      path.join(os.homedir(), ".agents", "skills-lock.json")
+    );
+    const projectLockFile = this.workspaceRoot
+      ? await firstExisting(
+          path.join(this.workspaceRoot, PROJECT_LOCK_NAME),
+          path.join(this.workspaceRoot, "skills-lock.json")
+        )
+      : undefined;
+
+    const fetchScope = async (global: boolean): Promise<HarnessJson[]> => {
+      const args = ["harnesses", "list", "--json"];
+      if (global) {
+        args.push("--global");
+      }
+      try {
+        const { stdout } = await execFileAsync(this.cliPath, args, opts);
+        return assertJsonArray(stdout, isHarnessJson, "harnesses list");
+      } catch (err) {
+        // Older builds exit non-zero on an empty project list; the JSON
+        // is still on stdout.
+        const stdout = (err as Record<string, unknown>)["stdout"];
+        if (typeof stdout === "string" && stdout.trim()) {
+          return assertJsonArray(stdout, isHarnessJson, "harnesses list");
+        }
+        return [];
+      }
+    };
+
+    const [globalHarnesses, projectHarnesses, rulesEntries] = await Promise.all(
+      [
+        fetchScope(true),
+        fetchScope(false),
+        this.rulesStatus().catch((): RulesEntry[] => [])
+      ]
+    );
+
+    const unlinkedRules = new Set(
+      rulesEntries
+        .filter(
+          (e) =>
+            e.state === "missing" ||
+            e.state === "broken" ||
+            e.state === "standalone"
+        )
+        .flatMap((e) => e.agents)
+    );
+
+    return [...globalHarnesses, ...projectHarnesses].map((harness) => ({
+      name: harness.displayName,
+      cliName: harness.name,
+      scope: harness.scope,
+      filePath: harness.scope === "global" ? globalStateFile : projectLockFile,
+      status: harness.installed ? "✓ installed" : undefined,
+      description: unlinkedRules.has(harness.name)
+        ? "rules not linked to AGENTS.md"
+        : undefined
+    }));
+  }
+
+  // ---------------------------------------------------------------------
+  // Lock files
+  // ---------------------------------------------------------------------
+
   async hasProjectLockFile(): Promise<boolean> {
+    return (await this.projectLockPath()) !== undefined;
+  }
+
+  /** The project lock file on disk, preferring mdm.lock over the v1 name. */
+  async projectLockPath(): Promise<string | undefined> {
+    const root = this.workspaceRoot;
+    if (!root) {
+      return undefined;
+    }
+    for (const name of [PROJECT_LOCK_NAME, "skills-lock.json"]) {
+      const candidate = path.join(root, name);
+      if (await fileExists(candidate)) {
+        return candidate;
+      }
+    }
+    return undefined;
+  }
+
+  /**
+   * True when the project still carries the pre-release v2 lock name
+   * (mdm-lock.json) and no mdm.lock. The released CLI does not read the
+   * old name, so the file is invisible until renamed.
+   */
+  async hasPreReleaseLockFile(): Promise<boolean> {
     const root = this.workspaceRoot;
     if (!root) {
       return false;
     }
-    for (const name of ["mdm-lock.json", "skills-lock.json"]) {
-      try {
-        await access(path.join(root, name));
-        return true;
-      } catch {
-        // keep looking
-      }
-    }
-    return false;
+    const [stale, current] = await Promise.all([
+      fileExists(path.join(root, PRE_RELEASE_LOCK_NAME)),
+      fileExists(path.join(root, PROJECT_LOCK_NAME))
+    ]);
+    return stale && !current;
   }
 
   /**
    * v1 lock files still present in the project. mdm v2 reads them
-   * transparently but only ever writes mdm-lock.json, so their presence
-   * means `mdm migrate` has not been run yet. The skills-lock.json
-   * tombstone that migration leaves behind (marked with "_moved") does
-   * not count.
+   * transparently but only ever writes mdm.lock, so their presence means
+   * `mdm migrate` has not been run yet. The skills-lock.json tombstone
+   * that migration leaves behind (marked with "_moved") does not count.
    */
   async detectLegacyLockFiles(): Promise<string[]> {
     const root = this.workspaceRoot;
@@ -331,27 +641,75 @@ export class MdmClient {
       return [];
     }
     const found: string[] = [];
-    for (const name of [
-      "skills-lock.json",
-      "knowledge-lock.json",
-      "plugins-lock.json"
-    ]) {
-      try {
-        const raw = await readFile(path.join(root, name), "utf8");
-        const data: unknown = JSON.parse(raw);
-        const moved =
-          typeof data === "object" && data !== null
-            ? (data as Record<string, unknown>)["_moved"]
-            : undefined;
-        if (typeof moved !== "string") {
-          found.push(name);
-        }
-      } catch {
-        // absent or unreadable — migration itself will surface parse errors
+    for (const name of LEGACY_LOCK_NAMES) {
+      const data = await readJsonFile(path.join(root, name));
+      if (data && typeof data["_moved"] !== "string") {
+        found.push(name);
       }
     }
     return found;
   }
+
+  /**
+   * The install mode each scope records: `installMode` in mdm.lock and in
+   * mdm-state.json. An absent value means symlink, the default.
+   */
+  async readInstallModes(): Promise<ScopeInstallModes> {
+    const root = this.workspaceRoot;
+    const [projectLock, globalState] = await Promise.all([
+      root ? readJsonFile(path.join(root, PROJECT_LOCK_NAME)) : undefined,
+      readJsonFile(globalStatePath())
+    ]);
+    return {
+      project: parseInstallMode(projectLock?.["installMode"]),
+      global: parseInstallMode(globalState?.["installMode"])
+    };
+  }
+
+  /** Number of skills the project lock records, for the mode-switch guard. */
+  async projectLockSkillCount(): Promise<number> {
+    const root = this.workspaceRoot;
+    if (!root) {
+      return 0;
+    }
+    const lock = await readJsonFile(path.join(root, PROJECT_LOCK_NAME));
+    const skills = lock?.["skills"];
+    return typeof skills === "object" && skills !== null
+      ? Object.keys(skills as object).length
+      : 0;
+  }
+
+  /**
+   * Knowledge and plugin entries come straight from the project lock -
+   * mdm.lock is the source of truth, with the v1 per-feature files as a
+   * pre-migration fallback. No CLI round trip needed for listing.
+   */
+  async readProjectLockSections(): Promise<ProjectLockSections> {
+    const root = this.workspaceRoot;
+    const empty: ProjectLockSections = { knowledge: [], plugins: [] };
+    if (!root) {
+      return empty;
+    }
+    const unified = await readJsonFile(path.join(root, PROJECT_LOCK_NAME));
+    if (unified) {
+      return {
+        knowledge: parseLockSection(unified["knowledge"]),
+        plugins: parseLockSection(unified["plugins"])
+      };
+    }
+    const [legacyKnowledge, legacyPlugins] = await Promise.all([
+      readJsonFile(path.join(root, "knowledge-lock.json")),
+      readJsonFile(path.join(root, "plugins-lock.json"))
+    ]);
+    return {
+      knowledge: parseLockSection(legacyKnowledge?.["bundles"]),
+      plugins: parseLockSection(legacyPlugins?.["plugins"])
+    };
+  }
+
+  // ---------------------------------------------------------------------
+  // Version / migration / diagnostics
+  // ---------------------------------------------------------------------
 
   /** Reported CLI semver major, or undefined for dev builds. */
   async cliMajorVersion(): Promise<number | undefined> {
@@ -376,10 +734,15 @@ export class MdmClient {
     return stripAnsi(stdout);
   }
 
-  async migrate(deleteOldFiles: boolean): Promise<string> {
+  async migrate(
+    opts: { deleteOldFiles?: boolean; force?: boolean } = {}
+  ): Promise<string> {
     const args = ["migrate", "-y"];
-    if (deleteOldFiles) {
+    if (opts.deleteOldFiles) {
       args.push("--no-tombstone");
+    }
+    if (opts.force) {
+      args.push("--force");
     }
     const { stdout } = await execFileAsync(this.cliPath, args, {
       timeout: 60_000,
@@ -388,33 +751,38 @@ export class MdmClient {
     return stripAnsi(stdout);
   }
 
-  /**
-   * Knowledge and plugin entries come straight from the project lock —
-   * mdm-lock.json is the source of truth, with the v1 per-feature files
-   * as a pre-migration fallback. No CLI round trip needed for listing.
-   */
-  async readProjectLockSections(): Promise<ProjectLockSections> {
-    const root = this.workspaceRoot;
-    const empty: ProjectLockSections = { knowledge: [], plugins: [] };
-    if (!root) {
-      return empty;
-    }
-    const unified = await readJsonFile(path.join(root, "mdm-lock.json"));
-    if (unified) {
-      return {
-        knowledge: parseLockSection(unified["knowledge"]),
-        plugins: parseLockSection(unified["plugins"])
-      };
-    }
-    const [legacyKnowledge, legacyPlugins] = await Promise.all([
-      readJsonFile(path.join(root, "knowledge-lock.json")),
-      readJsonFile(path.join(root, "plugins-lock.json"))
-    ]);
-    return {
-      knowledge: parseLockSection(legacyKnowledge?.["bundles"]),
-      plugins: parseLockSection(legacyPlugins?.["plugins"])
-    };
+  async runDoctor(): Promise<string> {
+    const { stdout } = await execFileAsync(this.cliPath, ["doctor"], {
+      timeout: 30_000,
+      cwd: this.workspaceRoot
+    });
+    return stripAnsi(stdout);
   }
+
+  /**
+   * `mdm bug --print` builds a prefilled GitHub issue-form URL from the
+   * local environment (version, OS, shell, detected harnesses) without
+   * opening a browser or sending anything. The URL is the last line.
+   */
+  async bugReportUrl(): Promise<string> {
+    const { stdout } = await execFileAsync(this.cliPath, ["bug", "--print"], {
+      timeout: 10_000,
+      cwd: this.workspaceRoot
+    });
+    const lines = stripAnsi(stdout)
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter((l) => l.length > 0);
+    const url = [...lines].reverse().find((l) => /^https?:\/\//.test(l));
+    if (!url) {
+      throw new Error("mdm bug did not print an issue URL");
+    }
+    return url;
+  }
+
+  // ---------------------------------------------------------------------
+  // Knowledge / plugins
+  // ---------------------------------------------------------------------
 
   async removeKnowledge(name: string): Promise<void> {
     await execFileAsync(this.cliPath, ["knowledge", "remove", name, "-y"], {
@@ -455,10 +823,10 @@ export class MdmClient {
     });
   }
 
-  async addPlugin(source: string, agents: string[]): Promise<void> {
+  async addPlugin(source: string, harnesses: string[]): Promise<void> {
     const args = ["plugins", "add", source, "-y"];
-    for (const agent of agents) {
-      args.push("-a", agent);
+    for (const harness of harnesses) {
+      args.push("--harness", harness);
     }
     await execFileAsync(this.cliPath, args, {
       timeout: 120_000,
@@ -480,31 +848,9 @@ export class MdmClient {
     });
   }
 
-  /** The project lock file on disk, preferring mdm-lock.json. */
-  async projectLockPath(): Promise<string | undefined> {
-    const root = this.workspaceRoot;
-    if (!root) {
-      return undefined;
-    }
-    for (const name of ["mdm-lock.json", "skills-lock.json"]) {
-      const candidate = path.join(root, name);
-      try {
-        await access(candidate);
-        return candidate;
-      } catch {
-        // keep looking
-      }
-    }
-    return undefined;
-  }
-
-  async runDoctor(): Promise<string> {
-    const { stdout } = await execFileAsync(this.cliPath, ["doctor"], {
-      timeout: 30_000,
-      cwd: this.workspaceRoot
-    });
-    return stripAnsi(stdout);
-  }
+  // ---------------------------------------------------------------------
+  // Rules
+  // ---------------------------------------------------------------------
 
   async rulesStatus(): Promise<RulesEntry[]> {
     const { stdout } = await execFileAsync(
@@ -515,27 +861,20 @@ export class MdmClient {
     return assertJsonArray(stdout, isRulesEntry, "rules status");
   }
 
-  async rulesLink(agent: string): Promise<void> {
+  async rulesLink(harness: string): Promise<void> {
     await execFileAsync(
       this.cliPath,
-      ["rules", "link", "--agent", agent, "-y"],
+      ["rules", "link", "--harness", harness, "-y"],
       { timeout: 10_000, cwd: this.workspaceRoot }
     );
   }
 
-  async rulesUnlink(agent: string): Promise<void> {
+  async rulesUnlink(harness: string): Promise<void> {
     await execFileAsync(
       this.cliPath,
-      ["rules", "unlink", "--agent", agent, "-y"],
+      ["rules", "unlink", "--harness", harness, "-y"],
       { timeout: 10_000, cwd: this.workspaceRoot }
     );
-  }
-
-  async installSkills(): Promise<void> {
-    await execFileAsync(this.cliPath, ["skills", "install", "-y"], {
-      timeout: 60_000,
-      cwd: this.workspaceRoot
-    });
   }
 
   private async listSkills(): Promise<MdmItem[]> {
@@ -546,74 +885,47 @@ export class MdmClient {
     );
     return parseSkillsJson(stdout);
   }
-
-  private async listAgents(): Promise<MdmItem[]> {
-    const opts = { timeout: 10_000, cwd: this.workspaceRoot };
-    const globalStateFile = await firstExisting(
-      path.join(os.homedir(), ".agents", "mdm-state.json"),
-      path.join(os.homedir(), ".agents", "skills-lock.json")
-    );
-    const projectLockFile = this.workspaceRoot
-      ? await firstExisting(
-          path.join(this.workspaceRoot, "mdm-lock.json"),
-          path.join(this.workspaceRoot, "skills-lock.json")
-        )
-      : undefined;
-
-    const fetchScope = async (global: boolean): Promise<AgentJson[]> => {
-      const args = ["agents", "list", "--json"];
-      if (global) {
-        args.push("--global");
-      }
-      try {
-        const { stdout } = await execFileAsync(this.cliPath, args, opts);
-        return assertJsonArray(stdout, isAgentJson, "agents list");
-      } catch (err) {
-        const stdout = (err as Record<string, unknown>)["stdout"];
-        if (typeof stdout === "string" && stdout.trim()) {
-          return assertJsonArray(stdout, isAgentJson, "agents list");
-        }
-        return [];
-      }
-    };
-
-    const [globalAgents, projectAgents, rulesEntries] = await Promise.all([
-      fetchScope(true),
-      fetchScope(false),
-      this.rulesStatus().catch((): RulesEntry[] => [])
-    ]);
-
-    const missingRules = new Set(
-      rulesEntries.filter((e) => e.state === "missing").flatMap((e) => e.agents)
-    );
-
-    return [...globalAgents, ...projectAgents].map((agent) => ({
-      name: agent.displayName,
-      cliName: agent.name,
-      scope: agent.scope,
-      filePath: agent.scope === "global" ? globalStateFile : projectLockFile,
-      status: missingRules.has(agent.name) ? "⚠ rules not linked" : undefined
-    }));
-  }
 }
 
 // ---------------------------------------------------------------------------
-// Parsers
+// Paths
 // ---------------------------------------------------------------------------
+
+/**
+ * The per-user state file (`mdm-state.json`), honoring the same
+ * XDG_STATE_HOME override the CLI uses.
+ */
+export function globalStatePath(): string {
+  const xdgState = process.env["XDG_STATE_HOME"];
+  if (xdgState) {
+    return path.join(xdgState, "mdm", "state.json");
+  }
+  return path.join(os.homedir(), ".agents", "mdm-state.json");
+}
+
+async function fileExists(filePath: string): Promise<boolean> {
+  try {
+    await access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 async function firstExisting(
   ...candidates: string[]
 ): Promise<string | undefined> {
   for (const candidate of candidates) {
-    try {
-      await access(candidate);
+    if (await fileExists(candidate)) {
       return candidate;
-    } catch {
-      // keep looking
     }
   }
   return candidates[0];
 }
+
+// ---------------------------------------------------------------------------
+// Parsers
+// ---------------------------------------------------------------------------
 
 async function readJsonFile(
   filePath: string
@@ -625,9 +937,17 @@ async function readJsonFile(
       return data as Record<string, unknown>;
     }
   } catch {
-    // absent or unreadable — callers treat this as an empty section
+    // absent or unreadable - callers treat this as an empty section
   }
   return undefined;
+}
+
+function parseInstallMode(value: unknown): InstallMode | undefined {
+  return value === "copy"
+    ? "copy"
+    : value === "symlink"
+      ? "symlink"
+      : undefined;
 }
 
 function parseLockSection(section: unknown): LockSectionEntry[] {
@@ -685,7 +1005,7 @@ function assertJsonArray<T>(
   return data as T[];
 }
 
-function isKnownAgent(v: unknown): v is KnownAgent {
+function isKnownHarness(v: unknown): v is KnownHarness {
   if (typeof v !== "object" || v === null) {
     return false;
   }
@@ -724,7 +1044,7 @@ function isRulesEntry(v: unknown): v is RulesEntry {
   return typeof o["file"] === "string" && Array.isArray(o["agents"]);
 }
 
-function isAgentJson(v: unknown): v is AgentJson {
+function isHarnessJson(v: unknown): v is HarnessJson {
   if (typeof v !== "object" || v === null) {
     return false;
   }
@@ -752,13 +1072,24 @@ function parseSkillsJson(raw: string): MdmItem[] {
     ).toLowerCase();
     const itemPath = String(obj["Path"] ?? obj["path"] ?? "");
     const refRaw = obj["Ref"] ?? obj["ref"];
+    const pluginRaw = obj["Plugin"] ?? obj["plugin"];
+    // The JSON key for a skill's harnesses is still "Agents": the CLI keeps
+    // it as a stable external contract across the harness rename.
+    const harnessesRaw = obj["Agents"] ?? obj["agents"] ?? obj["harnesses"];
     return {
       name,
       description:
         desc !== undefined && desc !== null ? String(desc) : undefined,
       scope: scopeRaw === "project" ? "project" : "global",
       filePath: itemPath ? path.join(itemPath, "SKILL.md") : undefined,
-      ref: refRaw !== undefined && refRaw !== null ? String(refRaw) : undefined
+      ref: refRaw !== undefined && refRaw !== null ? String(refRaw) : undefined,
+      plugin:
+        typeof pluginRaw === "string" && pluginRaw ? pluginRaw : undefined,
+      harnesses: Array.isArray(harnessesRaw)
+        ? (harnessesRaw as unknown[]).filter(
+            (v): v is string => typeof v === "string"
+          )
+        : undefined
     } satisfies MdmItem;
   });
 }

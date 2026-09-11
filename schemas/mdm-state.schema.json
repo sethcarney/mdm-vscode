@@ -1,0 +1,87 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/sethcarney/mdm-vscode/schemas/mdm-state.schema.json",
+  "title": "mdm-state.json",
+  "description": "The mdm v2 per-user state file (~/.agents/mdm-state.json, or $XDG_STATE_HOME/mdm/state.json). Holds globally installed skills and agent definitions, the global configured-harness list, the global install mode, dismissed prompts, and experimental opt-ins. Never committed. Unknown keys are preserved across rewrites.",
+  "type": "object",
+  "required": ["version"],
+  "properties": {
+    "version": {
+      "description": "State format version. Version 2 adds installMode; version 1 files are read and upgraded in place.",
+      "type": "integer",
+      "minimum": 1,
+      "examples": [2]
+    },
+    "installMode": {
+      "description": "How global skills and agent definitions are placed into each harness's user directory. Absent means symlink (the default).",
+      "type": "string",
+      "enum": ["symlink", "copy"]
+    },
+    "configuredHarnesses": {
+      "description": "Harness names mdm installs into by default at global scope.",
+      "type": "array",
+      "items": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+      "uniqueItems": true
+    },
+    "configuredAgents": {
+      "description": "Pre-release spelling of configuredHarnesses; read as a fallback and rewritten.",
+      "type": "array",
+      "items": { "type": "string" },
+      "deprecated": true
+    },
+    "skills": {
+      "description": "Globally installed skills, keyed by name.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "source",
+          "sourceType",
+          "sourceUrl",
+          "installedAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "source": { "type": "string", "minLength": 1 },
+          "sourceType": { "type": "string" },
+          "sourceUrl": { "type": "string" },
+          "ref": { "type": "string" },
+          "skillPath": { "type": "string" },
+          "installedAt": { "type": "string", "format": "date-time" },
+          "updatedAt": { "type": "string", "format": "date-time" },
+          "pluginName": {
+            "description": "Owning plugin, when the skill was installed via mdm plugins.",
+            "type": "string"
+          }
+        }
+      }
+    },
+    "agents": {
+      "description": "Globally installed agent definitions, keyed by the sanitized definition name.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["source", "sourceType", "agentPath"],
+        "properties": {
+          "source": { "type": "string", "minLength": 1 },
+          "sourceType": { "type": "string" },
+          "ref": { "type": "string" },
+          "agentPath": { "type": "string", "minLength": 1 },
+          "format": { "type": "string", "enum": ["markdown", "toml"] }
+        }
+      }
+    },
+    "dismissed": {
+      "description": "Prompts the user chose not to see again.",
+      "type": "object",
+      "properties": {
+        "findSkillsPrompt": { "type": "boolean" }
+      }
+    },
+    "experimental": {
+      "description": "Persisted experimental feature opt-ins (mdm experimental enable).",
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}

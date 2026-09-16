@@ -126,6 +126,10 @@ export interface MdmItem {
   harnesses?: string[];
   /** Owning plugin, when a skill was installed via `mdm plugins`. */
   plugin?: string;
+  /** SPDX license of the source repository, when it declares one. */
+  license?: string;
+  /** Declared harness compatibility, when the skill states it. */
+  compatibility?: string;
   /** Source the entry was installed from (agent definitions). */
   source?: string;
   /** Canonical file format for agent definitions: "markdown" or "toml". */
@@ -1073,6 +1077,8 @@ function parseSkillsJson(raw: string): MdmItem[] {
     const itemPath = String(obj["Path"] ?? obj["path"] ?? "");
     const refRaw = obj["Ref"] ?? obj["ref"];
     const pluginRaw = obj["Plugin"] ?? obj["plugin"];
+    const licenseRaw = obj["License"] ?? obj["license"];
+    const compatRaw = obj["Compatibility"] ?? obj["compatibility"];
     // The JSON key for a skill's harnesses is still "Agents": the CLI keeps
     // it as a stable external contract across the harness rename.
     const harnessesRaw = obj["Agents"] ?? obj["agents"] ?? obj["harnesses"];
@@ -1085,6 +1091,10 @@ function parseSkillsJson(raw: string): MdmItem[] {
       ref: refRaw !== undefined && refRaw !== null ? String(refRaw) : undefined,
       plugin:
         typeof pluginRaw === "string" && pluginRaw ? pluginRaw : undefined,
+      license:
+        typeof licenseRaw === "string" && licenseRaw ? licenseRaw : undefined,
+      compatibility:
+        typeof compatRaw === "string" && compatRaw ? compatRaw : undefined,
       harnesses: Array.isArray(harnessesRaw)
         ? (harnessesRaw as unknown[]).filter(
             (v): v is string => typeof v === "string"

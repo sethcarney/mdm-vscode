@@ -806,6 +806,8 @@ export function activate(context: vscode.ExtensionContext): void {
         return;
       }
 
+      skillsProvider.setAuditResults(results);
+
       outputChannel.clear();
       if (results.length === 0) {
         outputChannel.appendLine("No skills to audit.");

@@ -1,6 +1,7 @@
 import * as path from "path";
 import * as vscode from "vscode";
 import {
+  AuditResult,
   LockSectionEntry,
   MdmClient,
   MdmItem,
@@ -30,6 +31,8 @@ export class MdmTreeItem extends vscode.TreeItem {
       /** Secondary text for scope headers (e.g. the install mode). */
       description?: string;
       tooltip?: string;
+      /** Latest audit result for this skill, when one has been fetched. */
+      audit?: AuditResult;
     }
   ) {
     super(label, collapsibleState);
@@ -83,10 +86,9 @@ export class MdmTreeItem extends vscode.TreeItem {
     }
 
     if (resource === "skills") {
-      this.iconPath = new vscode.ThemeIcon("symbol-function");
-      this.description = item.plugin
-        ? `${item.ref ?? ""} (plugin ${item.plugin})`.trim()
-        : item.ref;
+      const { audit } = options;
+      this.iconPath = skillIcon(audit);
+      this.description = skillDescription(item, audit);
       this.contextValue = "mdm-skill";
       const lines = [label];
       if (item.description) {
@@ -97,6 +99,15 @@ export class MdmTreeItem extends vscode.TreeItem {
       }
       if (item.plugin) {
         lines.push(`from plugin: ${item.plugin}`);
+      }
+      if (item.license) {
+        lines.push(`license: ${item.license}`);
+      }
+      if (item.compatibility) {
+        lines.push(`compatibility: ${item.compatibility}`);
+      }
+      if (audit) {
+        lines.push("", ...auditTooltipLines(audit));
       }
       this.tooltip = lines.join("\n");
     } else if (resource === "agents") {
@@ -153,6 +164,67 @@ export class MdmTreeItem extends vscode.TreeItem {
   }
 }
 
+function auditKey(scope: string, name: string): string {
+  return `${scope}:${name}`;
+}
+
+function skillIcon(audit?: AuditResult): vscode.ThemeIcon {
+  const findings = audit?.audits ?? [];
+  if (findings.some((a) => a.status === "fail")) {
+    return new vscode.ThemeIcon(
+      "shield",
+      new vscode.ThemeColor("problemsErrorIcon.foreground")
+    );
+  }
+  if (findings.some((a) => a.status === "warn")) {
+    return new vscode.ThemeIcon(
+      "shield",
+      new vscode.ThemeColor("problemsWarningIcon.foreground")
+    );
+  }
+  if (audit?.syncStatus === "outdated") {
+    return new vscode.ThemeIcon("arrow-circle-up");
+  }
+  return new vscode.ThemeIcon("symbol-function");
+}
+
+function skillDescription(item: MdmItem, audit?: AuditResult): string {
+  const parts: string[] = [];
+  if (item.ref) {
+    parts.push(item.ref);
+  }
+  // A count rather than the names: in global scope nearly every skill lands
+  // in the same harnesses, so listing them inline is repetition that buries
+  // the one row that differs. The names are in the tooltip.
+  const harnessCount = item.harnesses?.length ?? 0;
+  if (harnessCount > 0) {
+    parts.push(`${harnessCount} harness${harnessCount === 1 ? "" : "es"}`);
+  }
+  if (item.plugin) {
+    parts.push(`plugin ${item.plugin}`);
+  }
+  if (audit?.syncStatus === "outdated") {
+    parts.push("update available");
+  }
+  return parts.join(" · ");
+}
+
+function auditTooltipLines(audit: AuditResult): string[] {
+  const lines = [`Sync: ${audit.syncStatus}`];
+  if (audit.registryError) {
+    lines.push("Registry lookup failed; audit data may be incomplete");
+  }
+  for (const finding of audit.audits ?? []) {
+    const risk =
+      finding.riskLevel && finding.riskLevel !== "NONE"
+        ? ` (risk: ${finding.riskLevel})`
+        : "";
+    const summary = finding.summary ? `: ${finding.summary}` : "";
+    lines.push(`${finding.provider}: ${finding.status}${risk}${summary}`);
+  }
+  return lines;
+}
+
 export class MdmTreeProvider implements vscode.TreeDataProvider<MdmTreeItem> {
   private readonly _onDidChangeTreeData = new vscode.EventEmitter<
     MdmTreeItem | undefined | null | void
@@ -161,6 +233,8 @@ export class MdmTreeProvider implements vscode.TreeDataProvider<MdmTreeItem> {
 
   private _itemsPromise: Promise<MdmItem[]> | undefined;
   private _refreshTimer: ReturnType<typeof setTimeout> | undefined;
+  /** Latest audit results, keyed `scope:name`. Empty until an audit runs. */
+  private _audits = new Map<string, AuditResult>();
 
   constructor(
     private readonly client: MdmClient,
@@ -174,6 +248,9 @@ export class MdmTreeProvider implements vscode.TreeDataProvider<MdmTreeItem> {
     this._refreshTimer = setTimeout(() => {
       this._refreshTimer = undefined;
       this._itemsPromise = undefined;
+      // Audit results describe the item list about to be discarded, so they
+      // go with it rather than being left to describe stale rows.
+      this._audits.clear();
       this._onDidChangeTreeData.fire();
     }, 100);
   }
@@ -286,11 +363,23 @@ export class MdmTreeProvider implements vscode.TreeDataProvider<MdmTreeItem> {
     return [];
   }
 
+  /**
+   * Overlay audit results onto the tree. Rendered until the next `refresh()`,
+   * since anything that changes the skill list invalidates them.
+   */
+  setAuditResults(results: readonly AuditResult[]): void {
+    this._audits = new Map(
+      results.map((result) => [auditKey(result.scope, result.name), result])
+    );
+    this._onDidChangeTreeData.fire();
+  }
+
   private makeItemNode(item: MdmItem): MdmTreeItem {
     return new MdmTreeItem(item.name, vscode.TreeItemCollapsibleState.None, {
       kind: "resource-item",
       item,
-      resource: this.resource
+      resource: this.resource,
+      audit: this._audits.get(auditKey(item.scope, item.name))
     });
   }
 

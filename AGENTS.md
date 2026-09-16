@@ -47,6 +47,39 @@ On configuration change (`mdm.cliPath`) and whenever any mdm lock file changes o
 
 **`schemas/`** - `mdm-lock.schema.json` and `mdm-state.schema.json`, registered through `contributes.jsonValidation`. `contributes.languages` associates the `mdm.lock` filename with the built-in `json` language. The schemas mirror the Go structs in `internal/lock` of the CLI (`ProjectLockFile`, `GlobalState`, and their entry types); keep them in sync when the lock gains a key.
 
+## Git Conventions
+
+These match [`sethcarney/mdm`](https://github.com/sethcarney/mdm), so the two
+repositories read the same way.
+
+### Commit messages
+
+Use semantic (Conventional Commits) format:
+
+```
+<type>(<scope>): <short description>
+
+[optional body]
+```
+
+Types: `feat`, `fix`, `chore`, `docs`, `refactor`, `test`, `ci`
+
+### Branch naming
+
+Use a `<type>/<short-description>` prefix matching the commit type:
+
+```
+feat/audit-badges
+fix/mdm-v2-harness-commands
+chore/bump-types-vscode
+docs/readme-v2-requirement
+```
+
+This applies to AI agents too, and overrides whatever branch a coding-agent
+harness assigns. Claude Code on the web, for example, opens each session on a
+generated branch name; move the work to a branch named by the convention above
+before pushing, rather than pushing the generated name.
+
 ## Key constraints
 
 - Vocabulary follows the CLI: a **harness** is the AI tool (Claude Code, Cursor, …; `mdm harnesses`, `--harness`), an **agent** is an agent definition file (`mdm agents`, `--agent`). Pre-harness v2 builds called harnesses "agents"; do not reintroduce `mdm agents list --json` or `--agent` for a harness.

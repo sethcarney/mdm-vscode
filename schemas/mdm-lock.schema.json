@@ -1,0 +1,204 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/sethcarney/mdm-vscode/schemas/mdm-lock.schema.json",
+  "title": "mdm.lock",
+  "description": "The mdm v2 unified project lock. Records every project-scoped install (skills, agent definitions, knowledge bundles, plugins), the configured harnesses, and the scope's install mode. Written by the mdm CLI; unknown keys are preserved across rewrites.",
+  "type": "object",
+  "required": ["version"],
+  "properties": {
+    "version": {
+      "description": "Lock format version. Version 2 adds installMode; version 1 files are read and upgraded in place. A file written by a newer mdm than the one reading it aborts the command.",
+      "type": "integer",
+      "minimum": 1,
+      "examples": [2]
+    },
+    "installMode": {
+      "description": "How this scope's skills and agent definitions are placed into each harness's directory. Absent means symlink (the default). Switch with --copy / --symlink on mdm skills add, mdm skills install, or mdm agents add.",
+      "type": "string",
+      "enum": ["symlink", "copy"]
+    },
+    "configuredHarnesses": {
+      "description": "Harness names (e.g. claude-code, cursor) that mdm installs into by default. Managed by mdm harnesses add / remove and updated by mdm rules link.",
+      "type": "array",
+      "items": { "$ref": "#/definitions/harnessName" },
+      "uniqueItems": true
+    },
+    "configuredAgents": {
+      "description": "Pre-release spelling of configuredHarnesses. mdm reads it as a fallback and rewrites it under the new key.",
+      "type": "array",
+      "items": { "$ref": "#/definitions/harnessName" },
+      "deprecated": true
+    },
+    "skills": {
+      "description": "Installed skills, keyed by skill name. Restore with mdm skills install.",
+      "type": "object",
+      "additionalProperties": { "$ref": "#/definitions/skillEntry" }
+    },
+    "agents": {
+      "description": "Installed agent definitions (subagent persona files), keyed by the sanitized definition name. Restore with mdm agents install.",
+      "type": "object",
+      "additionalProperties": { "$ref": "#/definitions/agentEntry" }
+    },
+    "knowledge": {
+      "description": "Installed OKF knowledge bundles, keyed by bundle name. Restore with mdm knowledge install.",
+      "type": "object",
+      "additionalProperties": { "$ref": "#/definitions/knowledgeEntry" }
+    },
+    "plugins": {
+      "description": "Installed Agent Plugins, keyed by plugin name. Restore with mdm plugins install.",
+      "type": "object",
+      "additionalProperties": { "$ref": "#/definitions/pluginEntry" }
+    }
+  },
+  "definitions": {
+    "harnessName": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$",
+      "examples": [
+        "claude-code",
+        "cursor",
+        "github-copilot",
+        "gemini-cli",
+        "codex",
+        "opencode",
+        "windsurf",
+        "cline"
+      ]
+    },
+    "source": {
+      "description": "Where the entry was installed from: GitHub shorthand (owner/repo), a git URL, or a local path.",
+      "type": "string",
+      "minLength": 1,
+      "examples": [
+        "anthropics/skills",
+        "https://github.com/owner/repo",
+        "./local"
+      ]
+    },
+    "sourceType": {
+      "description": "How mdm interprets source.",
+      "type": "string",
+      "examples": ["github", "gitlab", "git", "url", "local"]
+    },
+    "ref": {
+      "description": "Git ref (tag, branch, or commit) the entry is pinned to.",
+      "type": "string"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "skillEntry": {
+      "type": "object",
+      "required": ["source", "sourceType"],
+      "properties": {
+        "source": { "$ref": "#/definitions/source" },
+        "sourceType": { "$ref": "#/definitions/sourceType" },
+        "ref": { "$ref": "#/definitions/ref" },
+        "skillPath": {
+          "description": "Path of the skill's SKILL.md inside the source tree, when the skill is not at the root.",
+          "type": "string"
+        }
+      }
+    },
+    "agentEntry": {
+      "type": "object",
+      "required": ["source", "sourceType", "agentPath"],
+      "properties": {
+        "source": { "$ref": "#/definitions/source" },
+        "sourceType": { "$ref": "#/definitions/sourceType" },
+        "ref": { "$ref": "#/definitions/ref" },
+        "agentPath": {
+          "description": "Path of the definition file inside the source tree. Required: a definition has no well-known file name, so the path is what lets mdm refresh it.",
+          "type": "string",
+          "minLength": 1
+        },
+        "format": {
+          "description": "Shape of the canonical file under .agents/agents. Absent means markdown; \"toml\" means a Codex TOML source.",
+          "type": "string",
+          "enum": ["markdown", "toml"]
+        }
+      }
+    },
+    "knowledgeEntry": {
+      "type": "object",
+      "required": ["source", "sourceType", "installDir", "specVersion"],
+      "properties": {
+        "source": { "$ref": "#/definitions/source" },
+        "sourceType": { "$ref": "#/definitions/sourceType" },
+        "sourceUrl": { "type": "string" },
+        "ref": { "$ref": "#/definitions/ref" },
+        "subpath": {
+          "description": "Directory inside the source that holds the bundle.",
+          "type": "string"
+        },
+        "installDir": {
+          "description": "Slash-separated directory relative to the project root the bundle is installed into.",
+          "type": "string"
+        },
+        "specVersion": {
+          "description": "Open Knowledge Format (OKF) spec version the bundle declares.",
+          "type": "string"
+        },
+        "contentHash": { "type": "string" },
+        "installedAt": { "$ref": "#/definitions/timestamp" },
+        "updatedAt": { "$ref": "#/definitions/timestamp" }
+      }
+    },
+    "pluginEntry": {
+      "type": "object",
+      "required": [
+        "source",
+        "sourceType",
+        "installDir",
+        "dataDir",
+        "specVersion"
+      ],
+      "properties": {
+        "source": { "$ref": "#/definitions/source" },
+        "sourceType": { "$ref": "#/definitions/sourceType" },
+        "sourceUrl": { "type": "string" },
+        "ref": { "$ref": "#/definitions/ref" },
+        "subpath": {
+          "description": "Directory inside the source that holds the plugin.",
+          "type": "string"
+        },
+        "installDir": {
+          "description": "Slash-separated directory relative to the project root the plugin is installed into (under .agents/plugins).",
+          "type": "string"
+        },
+        "dataDir": {
+          "description": "Persistent PLUGIN_DATA directory, preserved across updates and deleted only by mdm plugins remove --purge-data.",
+          "type": "string"
+        },
+        "specVersion": {
+          "description": "Agent Plugins spec version the manifest declares.",
+          "type": "string"
+        },
+        "version": {
+          "description": "The plugin manifest's own version field.",
+          "type": "string"
+        },
+        "contentHash": { "type": "string" },
+        "skills": {
+          "description": "Sanitized names of the skills the plugin installed into harness skill directories.",
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "skillAgents": {
+          "description": "Harnesses the plugin's skills were installed for.",
+          "type": "array",
+          "items": { "$ref": "#/definitions/harnessName" }
+        },
+        "mcp": {
+          "description": "Harness name to the namespaced MCP server ids written into that harness's MCP config.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      }
+    }
+  }
+}

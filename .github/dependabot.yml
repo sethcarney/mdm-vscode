@@ -14,6 +14,14 @@ updates:
       - dependency-name: typescript
         versions:
           - ">= 7"
+      # vsce refuses to package when @types/vscode is newer than
+      # engines.vscode, so the two must move together. Bumping the types
+      # alone silently breaks `bun run package`, and therefore the release
+      # workflow, which is how it broke before. Raise engines.vscode first,
+      # then widen this ignore to match.
+      - dependency-name: "@types/vscode"
+        versions:
+          - "> 1.125"
     groups:
       dev-dependencies:
         dependency-type: development

@@ -4,7 +4,6 @@ import {
   InstallMode,
   MdmClient,
   MdmScope,
-  PRE_RELEASE_LOCK_NAME,
   PROJECT_LOCK_NAME,
   ALL_LOCK_NAMES,
   stripAnsi
@@ -1384,7 +1383,6 @@ export function activate(context: vscode.ExtensionContext): void {
 
   checkCliAndWarn(client);
   void checkCliVersionAlignment(client);
-  void offerPreReleaseLockRename(client);
   void offerMigration(client, outputChannel, { manual: false });
 }
 
@@ -1523,45 +1521,6 @@ async function checkCliVersionAlignment(client: MdmClient): Promise<void> {
   void vscode.window.showWarningMessage(
     `mdm CLI v${major} detected. This extension targets v${SUPPORTED_CLI_MAJOR}: update the MDM extension to match.`
   );
-}
-
-/**
- * Pre-release v2 builds wrote the unified lock as mdm-lock.json. The
- * released CLI only reads mdm.lock (the content is the same JSON), so a
- * project that still carries the old name silently has no lock. Offer the
- * rename; the user confirms it.
- */
-async function offerPreReleaseLockRename(client: MdmClient): Promise<void> {
-  if (!(await client.hasPreReleaseLockFile())) {
-    return;
-  }
-  const root = vscode.workspace.workspaceFolders?.[0]?.uri;
-  if (!root) {
-    return;
-  }
-  const choice = await vscode.window.showWarningMessage(
-    `This project has ${PRE_RELEASE_LOCK_NAME}, the pre-release name of the v2 lock. mdm v2 now reads ${PROJECT_LOCK_NAME} (same JSON content), so the file is currently ignored.`,
-    `Rename to ${PROJECT_LOCK_NAME}`,
-    "Dismiss"
-  );
-  if (choice !== `Rename to ${PROJECT_LOCK_NAME}`) {
-    return;
-  }
-  try {
-    await vscode.workspace.fs.rename(
-      vscode.Uri.joinPath(root, PRE_RELEASE_LOCK_NAME),
-      vscode.Uri.joinPath(root, PROJECT_LOCK_NAME),
-      { overwrite: false }
-    );
-    void vscode.window.showInformationMessage(
-      `Renamed to ${PROJECT_LOCK_NAME}. Commit the rename so teammates pick it up.`
-    );
-    void vscode.commands.executeCommand("mdm.refreshAll");
-  } catch (err) {
-    void vscode.window.showErrorMessage(
-      `Could not rename the lock file: ${formatError(err)}`
-    );
-  }
 }
 
 /**

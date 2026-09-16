@@ -2,7 +2,7 @@ import * as path from "path";
 import * as vscode from "vscode";
 import {
   AuditResult,
-  LockSectionEntry,
+  SectionEntry,
   MdmClient,
   MdmItem,
   MdmResourceType,
@@ -597,20 +597,20 @@ function errorItem(message: string): MdmTreeItem {
 }
 
 // ---------------------------------------------------------------------------
-// Knowledge / Plugins trees - flat lists over the project lock sections
+// Knowledge / Plugins trees - flat lists from `mdm {knowledge,plugins} list --json`
 // ---------------------------------------------------------------------------
 
 export type LockSection = "knowledge" | "plugins";
 
 export class MdmLockSectionItem extends vscode.TreeItem {
   readonly kind: "lock-entry" | "message";
-  readonly entry?: LockSectionEntry;
+  readonly entry?: SectionEntry;
   readonly section?: LockSection;
 
   constructor(
     label: string,
     options:
-      | { kind: "lock-entry"; entry: LockSectionEntry; section: LockSection }
+      | { kind: "lock-entry"; entry: SectionEntry; section: LockSection }
       | { kind: "message"; isError?: boolean }
   ) {
     super(label, vscode.TreeItemCollapsibleState.None);
@@ -629,15 +629,52 @@ export class MdmLockSectionItem extends vscode.TreeItem {
     const { entry, section } = options;
     this.entry = entry;
     this.section = section;
-    this.iconPath = new vscode.ThemeIcon(
-      section === "knowledge" ? "book" : "plug"
-    );
+    // `valid` (plugins) and `present` (knowledge) are disk checks the CLI
+    // does for us; an entry can be in the lock and still be broken on disk.
+    const broken = entry.valid === false || entry.present === false;
+    this.iconPath = broken
+      ? new vscode.ThemeIcon(
+          "warning",
+          new vscode.ThemeColor("problemsErrorIcon.foreground")
+        )
+      : new vscode.ThemeIcon(section === "knowledge" ? "book" : "plug");
     this.contextValue =
       section === "knowledge" ? "mdm-knowledge" : "mdm-plugin";
-    this.description = entry.version ?? entry.ref ?? entry.specVersion;
+
+    const parts: string[] = [];
+    const version = entry.version ?? entry.ref ?? entry.specVersion;
+    if (version) {
+      parts.push(version);
+    }
+    if (entry.documents !== undefined) {
+      parts.push(`${entry.documents} doc${entry.documents === 1 ? "" : "s"}`);
+    }
+    if (entry.skills?.length) {
+      const count = entry.skills.length;
+      parts.push(`${count} skill${count === 1 ? "" : "s"}`);
+    }
+    if (entry.mcpServers) {
+      parts.push(
+        `${entry.mcpServers} MCP server${entry.mcpServers === 1 ? "" : "s"}`
+      );
+    }
+    if (entry.valid === false) {
+      parts.push("missing or invalid on disk");
+    }
+    if (entry.present === false) {
+      parts.push("missing on disk");
+    }
+    this.description = parts.join(" · ");
+
     const lines = [entry.name, entry.source];
     if (entry.skills?.length) {
       lines.push(`skills: ${entry.skills.join(", ")}`);
+    }
+    if (entry.harnesses?.length) {
+      lines.push(`harnesses: ${entry.harnesses.join(", ")}`);
+    }
+    if (entry.installDir) {
+      lines.push(`./${entry.installDir}`);
     }
     this.tooltip = lines.filter(Boolean).join("\n");
 
@@ -697,8 +734,7 @@ export class MdmLockSectionTreeProvider implements vscode.TreeDataProvider<MdmLo
       return [];
     }
     try {
-      const sections = await this.client.readProjectLockSections();
-      const entries = sections[this.section];
+      const entries = await this.client.listSection(this.section);
       if (entries.length === 0) {
         // Empty tree - the view's viewsWelcome content offers the add action.
         return [];

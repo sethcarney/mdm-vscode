@@ -11,12 +11,10 @@ const execFileAsync = promisify(execFile);
 export const PROJECT_LOCK_NAME = "mdm.lock";
 
 /**
- * The name the v2 lock carried before the rename to mdm.lock. The CLI has no
- * compatibility read of it, so the extension only detects it to nudge.
+ * v1 per-feature lock files. The extension never reads data out of these:
+ * mdm.lock is the only format it understands. They are detected solely so
+ * the UI can offer `mdm migrate`, which is what turns them into mdm.lock.
  */
-export const PRE_RELEASE_LOCK_NAME = "mdm-lock.json";
-
-/** v1 per-feature lock files that `mdm migrate` folds into mdm.lock. */
 export const LEGACY_LOCK_NAMES = [
   "skills-lock.json",
   "knowledge-lock.json",
@@ -26,7 +24,6 @@ export const LEGACY_LOCK_NAMES = [
 /** Every lock file name whose change on disk should refresh the views. */
 export const ALL_LOCK_NAMES = [
   PROJECT_LOCK_NAME,
-  PRE_RELEASE_LOCK_NAME,
   ...LEGACY_LOCK_NAMES
 ] as const;
 
@@ -88,21 +85,32 @@ export interface AuditResult {
   registryError?: boolean;
 }
 
-export interface LockSectionEntry {
+/**
+ * A plugin or knowledge bundle as `mdm {plugins,knowledge} list --json`
+ * reports it. The health fields (`valid`, `present`, `documents`,
+ * `mcpServers`) are disk checks only the CLI can do, which is why these come
+ * from the CLI rather than from mdm.lock.
+ */
+export interface SectionEntry {
   name: string;
   source: string;
   ref?: string;
-  installDir?: string;
-  specVersion?: string;
-  /** Plugin manifest version, when present. */
+  installDir: string;
+  specVersion: string;
+  /** Plugin manifest version. */
   version?: string;
-  /** Skill names a plugin installs, when present. */
+  /** Skill names a plugin installs. */
   skills?: string[];
-}
-
-export interface ProjectLockSections {
-  knowledge: LockSectionEntry[];
-  plugins: LockSectionEntry[];
+  /** Harnesses a plugin's skills are installed to. */
+  harnesses?: string[];
+  /** Wired MCP servers a plugin contributes. */
+  mcpServers?: number;
+  /** False when a plugin's manifest is missing or invalid on disk. */
+  valid?: boolean;
+  /** Documents a knowledge bundle holds. */
+  documents?: number;
+  /** False when a knowledge bundle is missing on disk. */
+  present?: boolean;
 }
 
 export interface ScopeInstallModes {
@@ -431,64 +439,44 @@ export class MdmClient {
   }
 
   /**
-   * `mdm agents list` has no --json, so agent definitions come straight
-   * from the lock files: the `agents` section of mdm.lock (project) and of
-   * mdm-state.json (global). The canonical file lives at
-   * `.agents/agents/<name>.md` (or `.toml` for a Codex source).
+   * `mdm agents list --json`. One call covers both scopes: the CLI flattens
+   * them into a single array with `scope` on each entry, the same shape
+   * `skills list --json` uses.
+   *
+   * The JSON carries no file path, so the canonical file is derived from the
+   * name and probed for both extensions (`.md`, or `.toml` for a Codex
+   * source). `canonicalMissing` is authoritative for whether it exists; the
+   * probe only decides which extension to open.
    */
   private async listAgentDefinitions(): Promise<MdmItem[]> {
+    const { stdout } = await execFileAsync(
+      this.cliPath,
+      ["agents", "list", "--json"],
+      { timeout: 15_000, cwd: this.workspaceRoot }
+    );
+    const entries = assertJsonArray(stdout, isAgentDefJson, "agents list");
     const root = this.workspaceRoot;
-    const [projectLock, globalState] = await Promise.all([
-      root ? readJsonFile(path.join(root, PROJECT_LOCK_NAME)) : undefined,
-      readJsonFile(globalStatePath())
-    ]);
-    const build = async (
-      section: unknown,
-      scope: MdmScope,
-      baseDir: string | undefined
-    ): Promise<MdmItem[]> => {
-      if (typeof section !== "object" || section === null || !baseDir) {
-        return [];
-      }
-      const items = await Promise.all(
-        Object.entries(section as Record<string, unknown>).map(
-          async ([name, value]): Promise<MdmItem | undefined> => {
-            if (typeof value !== "object" || value === null) {
-              return undefined;
-            }
-            const o = value as Record<string, unknown>;
-            const str = (key: string): string | undefined =>
-              typeof o[key] === "string" ? (o[key] as string) : undefined;
-            const format = str("format") === "toml" ? "toml" : "markdown";
-            const filePath = path.join(
-              baseDir,
-              ".agents",
-              "agents",
-              `${name}${format === "toml" ? ".toml" : ".md"}`
-            );
-            const present = await fileExists(filePath);
-            return {
-              name,
-              scope,
-              filePath,
-              ref: str("ref"),
-              source: str("source"),
-              format,
-              description: str("source"),
-              status: present ? undefined : "⚠ file missing"
-            };
-          }
-        )
-      );
-      return items
-        .filter((v): v is MdmItem => v !== undefined)
-        .sort((a, b) => a.name.localeCompare(b.name));
-    };
-    const [globalItems, projectItems] = await Promise.all([
-      build(globalState?.["agents"], "global", os.homedir()),
-      build(projectLock?.["agents"], "project", root)
-    ]);
-    return [...globalItems, ...projectItems];
+    const items = await Promise.all(
+      entries.map(async (entry): Promise<MdmItem> => {
+        const scope: MdmScope = entry.scope === "global" ? "global" : "project";
+        const baseDir = scope === "global" ? os.homedir() : root;
+        const filePath = baseDir
+          ? await agentDefinitionPath(baseDir, entry.name)
+          : undefined;
+        return {
+          name: entry.name,
+          scope,
+          filePath,
+          ref: entry.ref,
+          source: entry.source,
+          description: entry.source,
+          status: agentDefinitionStatus(entry)
+        };
+      })
+    );
+    return items.sort(
+      (a, b) => a.scope.localeCompare(b.scope) || a.name.localeCompare(b.name)
+    );
   }
 
   // ---------------------------------------------------------------------
@@ -532,15 +520,9 @@ export class MdmClient {
 
   private async listHarnesses(): Promise<MdmItem[]> {
     const opts = { timeout: 10_000, cwd: this.workspaceRoot };
-    const globalStateFile = await firstExisting(
-      globalStatePath(),
-      path.join(os.homedir(), ".agents", "skills-lock.json")
-    );
+    const globalStateFile = globalStatePath();
     const projectLockFile = this.workspaceRoot
-      ? await firstExisting(
-          path.join(this.workspaceRoot, PROJECT_LOCK_NAME),
-          path.join(this.workspaceRoot, "skills-lock.json")
-        )
+      ? path.join(this.workspaceRoot, PROJECT_LOCK_NAME)
       : undefined;
 
     const fetchScope = async (global: boolean): Promise<HarnessJson[]> => {
@@ -601,43 +583,21 @@ export class MdmClient {
     return (await this.projectLockPath()) !== undefined;
   }
 
-  /** The project lock file on disk, preferring mdm.lock over the v1 name. */
+  /** The project lock file on disk. mdm.lock is the only format read. */
   async projectLockPath(): Promise<string | undefined> {
     const root = this.workspaceRoot;
     if (!root) {
       return undefined;
     }
-    for (const name of [PROJECT_LOCK_NAME, "skills-lock.json"]) {
-      const candidate = path.join(root, name);
-      if (await fileExists(candidate)) {
-        return candidate;
-      }
-    }
-    return undefined;
+    const candidate = path.join(root, PROJECT_LOCK_NAME);
+    return (await fileExists(candidate)) ? candidate : undefined;
   }
 
   /**
-   * True when the project still carries the pre-release v2 lock name
-   * (mdm-lock.json) and no mdm.lock. The released CLI does not read the
-   * old name, so the file is invisible until renamed.
-   */
-  async hasPreReleaseLockFile(): Promise<boolean> {
-    const root = this.workspaceRoot;
-    if (!root) {
-      return false;
-    }
-    const [stale, current] = await Promise.all([
-      fileExists(path.join(root, PRE_RELEASE_LOCK_NAME)),
-      fileExists(path.join(root, PROJECT_LOCK_NAME))
-    ]);
-    return stale && !current;
-  }
-
-  /**
-   * v1 lock files still present in the project. mdm v2 reads them
-   * transparently but only ever writes mdm.lock, so their presence means
-   * `mdm migrate` has not been run yet. The skills-lock.json tombstone
-   * that migration leaves behind (marked with "_moved") does not count.
+   * v1 lock files still present in the project. The extension reads no data
+   * from them; their presence just means `mdm migrate` has not been run yet,
+   * so the UI can offer it. The skills-lock.json tombstone that migration
+   * leaves behind (marked with "_moved") does not count.
    */
   async detectLegacyLockFiles(): Promise<string[]> {
     const root = this.workspaceRoot;
@@ -684,31 +644,33 @@ export class MdmClient {
   }
 
   /**
-   * Knowledge and plugin entries come straight from the project lock -
-   * mdm.lock is the source of truth, with the v1 per-feature files as a
-   * pre-migration fallback. No CLI round trip needed for listing.
+   * Knowledge and plugin entries come from the CLI rather than from
+   * mdm.lock. The lock records what is declared; only the CLI reports
+   * whether the bundle or manifest actually loads from disk.
    */
-  async readProjectLockSections(): Promise<ProjectLockSections> {
-    const root = this.workspaceRoot;
-    const empty: ProjectLockSections = { knowledge: [], plugins: [] };
-    if (!root) {
-      return empty;
-    }
-    const unified = await readJsonFile(path.join(root, PROJECT_LOCK_NAME));
-    if (unified) {
-      return {
-        knowledge: parseLockSection(unified["knowledge"]),
-        plugins: parseLockSection(unified["plugins"])
-      };
-    }
-    const [legacyKnowledge, legacyPlugins] = await Promise.all([
-      readJsonFile(path.join(root, "knowledge-lock.json")),
-      readJsonFile(path.join(root, "plugins-lock.json"))
-    ]);
-    return {
-      knowledge: parseLockSection(legacyKnowledge?.["bundles"]),
-      plugins: parseLockSection(legacyPlugins?.["plugins"])
-    };
+  /** `mdm plugins list --json`. */
+  async listPlugins(): Promise<SectionEntry[]> {
+    const { stdout } = await execFileAsync(
+      this.cliPath,
+      ["plugins", "list", "--json"],
+      { timeout: 15_000, cwd: this.workspaceRoot }
+    );
+    return assertJsonArray(stdout, isSectionEntry, "plugins list");
+  }
+
+  /** `mdm knowledge list --json`. */
+  async listKnowledge(): Promise<SectionEntry[]> {
+    const { stdout } = await execFileAsync(
+      this.cliPath,
+      ["knowledge", "list", "--json"],
+      { timeout: 15_000, cwd: this.workspaceRoot }
+    );
+    return assertJsonArray(stdout, isSectionEntry, "knowledge list");
+  }
+
+  /** Whichever of the two the caller needs. */
+  async listSection(section: "knowledge" | "plugins"): Promise<SectionEntry[]> {
+    return section === "plugins" ? this.listPlugins() : this.listKnowledge();
   }
 
   // ---------------------------------------------------------------------
@@ -916,17 +878,6 @@ async function fileExists(filePath: string): Promise<boolean> {
   }
 }
 
-async function firstExisting(
-  ...candidates: string[]
-): Promise<string | undefined> {
-  for (const candidate of candidates) {
-    if (await fileExists(candidate)) {
-      return candidate;
-    }
-  }
-  return candidates[0];
-}
-
 // ---------------------------------------------------------------------------
 // Parsers
 // ---------------------------------------------------------------------------
@@ -954,34 +905,72 @@ function parseInstallMode(value: unknown): InstallMode | undefined {
       : undefined;
 }
 
-function parseLockSection(section: unknown): LockSectionEntry[] {
-  if (typeof section !== "object" || section === null) {
-    return [];
+interface AgentDefJson {
+  name: string;
+  scope: string;
+  source: string;
+  ref?: string;
+  canonicalMissing: boolean;
+  installedIn: string[];
+  missingFrom: string[];
+}
+
+function isAgentDefJson(v: unknown): v is AgentDefJson {
+  if (typeof v !== "object" || v === null) {
+    return false;
   }
-  return Object.entries(section as Record<string, unknown>)
-    .map(([name, value]): LockSectionEntry | undefined => {
-      if (typeof value !== "object" || value === null) {
-        return undefined;
-      }
-      const o = value as Record<string, unknown>;
-      const str = (key: string): string | undefined =>
-        typeof o[key] === "string" ? (o[key] as string) : undefined;
-      return {
-        name,
-        source: str("source") ?? "",
-        ref: str("ref"),
-        installDir: str("installDir"),
-        specVersion: str("specVersion"),
-        version: str("version"),
-        skills: Array.isArray(o["skills"])
-          ? (o["skills"] as unknown[]).filter(
-              (v): v is string => typeof v === "string"
-            )
-          : undefined
-      };
-    })
-    .filter((v): v is LockSectionEntry => v !== undefined)
-    .sort((a, b) => a.name.localeCompare(b.name));
+  const o = v as Record<string, unknown>;
+  return (
+    typeof o["name"] === "string" &&
+    typeof o["scope"] === "string" &&
+    typeof o["source"] === "string"
+  );
+}
+
+function isSectionEntry(v: unknown): v is SectionEntry {
+  if (typeof v !== "object" || v === null) {
+    return false;
+  }
+  const o = v as Record<string, unknown>;
+  return typeof o["name"] === "string" && typeof o["source"] === "string";
+}
+
+/**
+ * The status line for an agent definition. A missing canonical file is the
+ * loudest problem; otherwise a definition the lock says should be in a
+ * harness but is not gets named, because that is what the panel exists to
+ * surface.
+ */
+function agentDefinitionStatus(entry: AgentDefJson): string | undefined {
+  if (entry.canonicalMissing) {
+    return "⚠ file missing";
+  }
+  if (entry.installedIn.length === 0) {
+    return "⚠ not installed in any harness";
+  }
+  if (entry.missingFrom.length > 0) {
+    return `⚠ missing from ${entry.missingFrom.join(", ")}`;
+  }
+  return undefined;
+}
+
+/**
+ * Canonical file for an agent definition. Codex sources are TOML, everything
+ * else markdown, and the JSON does not say which, so both are probed. The
+ * markdown name is the fallback so a missing file still opens somewhere
+ * sensible.
+ */
+async function agentDefinitionPath(
+  baseDir: string,
+  name: string
+): Promise<string> {
+  const dir = path.join(baseDir, ".agents", "agents");
+  const markdown = path.join(dir, `${name}.md`);
+  const toml = path.join(dir, `${name}.toml`);
+  if (await fileExists(markdown)) {
+    return markdown;
+  }
+  return (await fileExists(toml)) ? toml : markdown;
 }
 
 export function stripAnsi(text: string): string {
